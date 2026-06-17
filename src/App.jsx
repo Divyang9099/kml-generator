@@ -67,12 +67,7 @@ export default function App() {
       setSelectionMode('to')
     } else if (selectionMode === 'to') {
       if (idx === fromIdx) return
-      if (idx < fromIdx) {
-        setToIdx(fromIdx)
-        setFromIdx(idx)
-      } else {
-        setToIdx(idx)
-      }
+      setToIdx(idx)
       setSelectionMode(null)
     }
   }, [selectionMode, fromIdx])
@@ -87,7 +82,7 @@ export default function App() {
   }, [selectedLine])
 
   const rangeLabel = useCallback(() => {
-    const end = startNumber + (toIdx - fromIdx)
+    const end = startNumber + Math.abs(toIdx - fromIdx)
     return `T${startNumber}-T${end}`
   }, [startNumber, fromIdx, toIdx])
 
@@ -215,7 +210,7 @@ export default function App() {
                       startNumber={startNumber}
                       onStartNumberChange={setStartNumber}
                       towerCount={
-                        fromIdx !== null && toIdx !== null ? toIdx - fromIdx + 1 : 0
+                        fromIdx !== null && toIdx !== null ? Math.abs(toIdx - fromIdx) + 1 : 0
                       }
                     />
                   </section>

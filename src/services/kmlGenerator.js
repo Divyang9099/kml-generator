@@ -1,6 +1,7 @@
 export function generateKML(towers, fromIdx, toIdx, lineName, startNumber = 1) {
-  // Renumber the selected towers sequentially starting at `startNumber`.
-  const selected = towers.slice(fromIdx, toIdx + 1).map((t, i) => ({
+  const lo = Math.min(fromIdx, toIdx)
+  const hi = Math.max(fromIdx, toIdx)
+  const selected = towers.slice(lo, hi + 1).map((t, i) => ({
     ...t,
     towerNumber: startNumber + i,
   }))
@@ -70,7 +71,9 @@ ${placemarks}
 }
 
 export function generateCSV(towers, fromIdx, toIdx, lineName, startNumber = 1) {
-  const selected = towers.slice(fromIdx, toIdx + 1).map((t, i) => ({
+  const lo = Math.min(fromIdx, toIdx)
+  const hi = Math.max(fromIdx, toIdx)
+  const selected = towers.slice(lo, hi + 1).map((t, i) => ({
     ...t,
     towerNumber: startNumber + i,
   }))
