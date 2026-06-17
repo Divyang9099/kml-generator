@@ -27,15 +27,12 @@ function TowerMarkers({ towers, fromIdx, toIdx, selectionMode, onTowerClick, sta
   return towers.map((tower, idx) => {
     const isFrom = idx === fromIdx
     const isTo = idx === toIdx
-    const inRange =
-      fromIdx !== null &&
-      toIdx !== null &&
-      idx > fromIdx &&
-      idx < toIdx
-    const inSelection =
-      fromIdx !== null && toIdx !== null && idx >= fromIdx && idx <= toIdx
+    const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
+    const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
+    const inRange = lo !== null && idx > lo && idx < hi
+    const inSelection = lo !== null && idx >= lo && idx <= hi
     const displayNum = inSelection
-      ? (Number(startNumber) || 1) + (idx - fromIdx)
+      ? (Number(startNumber) || 1) + (idx - lo)
       : tower.towerNumber
 
     let fillColor = '#ffffff'
@@ -88,8 +85,9 @@ function TowerMarkers({ towers, fromIdx, toIdx, selectionMode, onTowerClick, sta
 
 export default function MapView({ towers, fromIdx, toIdx, selectionMode, onTowerClick, startNumber }) {
   const positions = towers.map(t => [t.lat, t.lon])
-  const rangePositions =
-    fromIdx !== null && toIdx !== null ? positions.slice(fromIdx, toIdx + 1) : []
+  const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
+  const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
+  const rangePositions = lo !== null ? positions.slice(lo, hi + 1) : []
 
   return (
     <div className={`map-wrap${selectionMode ? ' map-wrap--selecting' : ''}`}>
