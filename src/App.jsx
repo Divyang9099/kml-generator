@@ -259,6 +259,11 @@ export default function App() {
           onTowerClick={handleTowerClick}
           startNumber={startNumber}
         />
+        <img
+          src="/make in india.png"
+          alt="Make in India"
+          className="make-in-india-badge"
+        />
       </main>
     </div>
   )

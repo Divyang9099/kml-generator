@@ -431,6 +431,20 @@ svg { flex-shrink: 0; }
 .range-arrow strong { font-size: 18px; font-weight: 800; color: var(--primary); line-height: 1; }
 .range-arrow span   { font-size: 9px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.4px; }
 
+/* ── Make in India badge ── */
+.make-in-india-badge {
+  position: fixed;
+  bottom: 18px;
+  left: 310px;
+  height: 48px;
+  width: auto;
+  background: transparent;
+  border: none;
+  pointer-events: none;
+  z-index: 1000;
+  mix-blend-mode: multiply;
+}
+
 /* ── Renumber row ── */
 .renumber-row {
   display: flex;
