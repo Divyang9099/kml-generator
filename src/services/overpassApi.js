@@ -1,18 +1,32 @@
-// Multiple public Overpass mirrors — we rotate through them when one is busy.
-const OVERPASS_MIRRORS = [
+const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
+// In production (Vercel), browser→Overpass is blocked by CORS.
+// We route through our own serverless proxy at /api/overpass.
+// In local dev, direct fetch works fine (no CORS restriction on localhost).
 async function query(q) {
-  let lastError = null
+  if (!import.meta.env.DEV) {
+    // Production: use Vercel serverless proxy
+    const res = await fetch('/api/overpass', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `Server error: ${res.status}. Please retry.`)
+    }
+    return res.json()
+  }
 
-  // Try each mirror; on 429/504 wait and retry the same mirror once before moving on.
-  for (const url of OVERPASS_MIRRORS) {
+  // Dev: hit Overpass mirrors directly, rotating on 429/504
+  let lastError = null
+  for (const url of MIRRORS) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const res = await fetch(url, {
@@ -20,28 +34,17 @@ async function query(q) {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `data=${encodeURIComponent(q)}`,
         })
-
         if (res.status === 429 || res.status === 504) {
           lastError = new Error(`Server busy (${res.status})`)
-          await sleep(1200 * (attempt + 1)) // back off, then retry
+          await sleep(1200 * (attempt + 1))
           continue
         }
-        if (!res.ok) {
-          lastError = new Error(`Overpass error: ${res.status}`)
-          break // try next mirror
-        }
-        return await res.json()
-      } catch (e) {
-        lastError = e
-        break // network/CORS failure — try next mirror
-      }
+        if (!res.ok) { lastError = new Error(`Overpass error: ${res.status}`); break }
+        return res.json()
+      } catch (e) { lastError = e; break }
     }
   }
-
-  throw new Error(
-    (lastError?.message || 'All Overpass servers are busy') +
-    '. Please wait a few seconds and try again.'
-  )
+  throw new Error((lastError?.message || 'All Overpass servers busy') + '. Please retry.')
 }
 
 // Parse "relation:12345", "way:12345", or a plain number (unknown type)
