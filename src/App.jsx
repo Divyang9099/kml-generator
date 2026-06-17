@@ -247,6 +247,15 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* ── Make in India badge — bottom of sidebar ── */}
+        <div className="sidebar-footer">
+          <img
+            src="/make in india.png"
+            alt="Make in India"
+            className="make-in-india-badge"
+          />
+        </div>
       </aside>
 
       {/* ── MAP ── */}
@@ -258,11 +267,6 @@ export default function App() {
           selectionMode={selectionMode}
           onTowerClick={handleTowerClick}
           startNumber={startNumber}
-        />
-        <img
-          src="/make in india.png"
-          alt="Make in India"
-          className="make-in-india-badge"
         />
       </main>
     </div>

@@ -432,17 +432,19 @@ svg { flex-shrink: 0; }
 .range-arrow span   { font-size: 9px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.4px; }
 
 /* ── Make in India badge ── */
+.sidebar-footer {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
 .make-in-india-badge {
-  position: absolute;
-  bottom: 24px;
-  left: 12px;
-  height: 80px;
-  width: auto;
-  background: transparent;
-  border: none;
-  pointer-events: none;
-  z-index: 1000;
+  width: 100%;
+  height: auto;
+  display: block;
   mix-blend-mode: multiply;
+  pointer-events: none;
 }
 
 /* ── Renumber row ── */
