@@ -3,15 +3,21 @@ import { useRef, useEffect } from 'react'
 function towerStatus(idx, fromIdx, toIdx) {
   if (idx === fromIdx) return 'from'
   if (idx === toIdx)   return 'to'
-  if (fromIdx !== null && toIdx !== null && idx > fromIdx && idx < toIdx) return 'range'
+  if (fromIdx !== null && toIdx !== null) {
+    const lo = Math.min(fromIdx, toIdx)
+    const hi = Math.max(fromIdx, toIdx)
+    if (idx > lo && idx < hi) return 'range'
+  }
   return 'default'
 }
 
 export default function TowerList({ towers, fromIdx, toIdx, onTowerClick, selectionMode, startNumber = 1 }) {
-  const inRange = (idx) =>
-    fromIdx !== null && toIdx !== null && idx >= fromIdx && idx <= toIdx
+  const inRange = (idx) => {
+    if (fromIdx === null || toIdx === null) return false
+    return idx >= Math.min(fromIdx, toIdx) && idx <= Math.max(fromIdx, toIdx)
+  }
   const displayNum = (idx) =>
-    inRange(idx) ? (Number(startNumber) || 1) + (idx - fromIdx) : towers[idx].towerNumber
+    inRange(idx) ? (Number(startNumber) || 1) + Math.abs(idx - fromIdx) : towers[idx].towerNumber
 
   const fromRef = useRef(null)
   const toRef   = useRef(null)

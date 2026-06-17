@@ -32,7 +32,7 @@ function TowerMarkers({ towers, fromIdx, toIdx, selectionMode, onTowerClick, sta
     const inRange = lo !== null && idx > lo && idx < hi
     const inSelection = lo !== null && idx >= lo && idx <= hi
     const displayNum = inSelection
-      ? (Number(startNumber) || 1) + (idx - lo)
+      ? (Number(startNumber) || 1) + Math.abs(idx - fromIdx)
       : tower.towerNumber
 
     let fillColor = '#ffffff'

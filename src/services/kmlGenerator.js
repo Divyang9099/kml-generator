@@ -1,7 +1,9 @@
 export function generateKML(towers, fromIdx, toIdx, lineName, startNumber = 1) {
   const lo = Math.min(fromIdx, toIdx)
   const hi = Math.max(fromIdx, toIdx)
-  const selected = towers.slice(lo, hi + 1).map((t, i) => ({
+  const slice = towers.slice(lo, hi + 1)
+  const ordered = fromIdx > toIdx ? [...slice].reverse() : slice
+  const selected = ordered.map((t, i) => ({
     ...t,
     towerNumber: startNumber + i,
   }))
@@ -73,7 +75,9 @@ ${placemarks}
 export function generateCSV(towers, fromIdx, toIdx, lineName, startNumber = 1) {
   const lo = Math.min(fromIdx, toIdx)
   const hi = Math.max(fromIdx, toIdx)
-  const selected = towers.slice(lo, hi + 1).map((t, i) => ({
+  const slice = towers.slice(lo, hi + 1)
+  const ordered = fromIdx > toIdx ? [...slice].reverse() : slice
+  const selected = ordered.map((t, i) => ({
     ...t,
     towerNumber: startNumber + i,
   }))
