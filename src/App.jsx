@@ -126,7 +126,7 @@ export default function App() {
               <path d="M16 2L4 17h10l-2 13L28 12H18L20 2z" fill="#f59e0b" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
             <div>
-              <h1 className="app-title">KML Creator</h1>
+              <h1 className="app-title">सर्जनम्</h1>
               <p className="app-subtitle">Power Line Tower Export</p>
             </div>
           </div>
