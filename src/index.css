@@ -433,10 +433,10 @@ svg { flex-shrink: 0; }
 
 /* ── Make in India badge ── */
 .make-in-india-badge {
-  position: fixed;
-  bottom: 18px;
-  left: 310px;
-  height: 48px;
+  position: absolute;
+  bottom: 24px;
+  left: 12px;
+  height: 80px;
   width: auto;
   background: transparent;
   border: none;
