@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import SearchBar from './components/SearchBar.jsx'
 import MapView from './components/MapView.jsx'
 import TowerList from './components/TowerList.jsx'
@@ -9,6 +9,8 @@ import {
   downloadKML,
   generateCSV,
   downloadCSV,
+  calcLength,
+  formatLength,
 } from './services/kmlGenerator.js'
 
 export default function App() {
@@ -22,6 +24,14 @@ export default function App() {
   const [selectionMode, setSelectionMode] = useState(null) // 'from' | 'to' | null
   const [startNumber, setStartNumber]     = useState(1)     // custom renumber start
   const [error, setError]                 = useState(null)
+
+  const totalLength = useMemo(() => calcLength(towers), [towers])
+  const rangeLength = useMemo(() => {
+    if (fromIdx === null || toIdx === null) return 0
+    const lo = Math.min(fromIdx, toIdx)
+    const hi = Math.max(fromIdx, toIdx)
+    return calcLength(towers.slice(lo, hi + 1))
+  }, [towers, fromIdx, toIdx])
 
   const handleSearch = useCallback(async (q) => {
     setSearching(true)
@@ -190,7 +200,7 @@ export default function App() {
                         <circle cx="10" cy="10" r="7" stroke="#6366f1" strokeWidth="1.5"/>
                         <path d="M10 7v4M10 13v.5" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/>
                       </svg>
-                      {towers.length} towers loaded
+                      {towers.length} towers loaded · {formatLength(totalLength)}
                     </div>
                   )}
                 </div>
@@ -212,6 +222,8 @@ export default function App() {
                       towerCount={
                         fromIdx !== null && toIdx !== null ? Math.abs(toIdx - fromIdx) + 1 : 0
                       }
+                      rangeLength={rangeLength}
+                      formatLength={formatLength}
                     />
                   </section>
 

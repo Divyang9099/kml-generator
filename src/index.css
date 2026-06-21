@@ -430,6 +430,7 @@ svg { flex-shrink: 0; }
 }
 .range-arrow strong { font-size: 18px; font-weight: 800; color: var(--primary); line-height: 1; }
 .range-arrow span   { font-size: 9px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.4px; }
+.range-distance     { font-size: 10px !important; font-weight: 700 !important; color: #6366f1 !important; text-transform: none !important; letter-spacing: 0 !important; margin-top: 2px; }
 
 /* ── Make in India badge ── */
 .sidebar-footer {

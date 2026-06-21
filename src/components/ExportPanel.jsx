@@ -9,6 +9,8 @@ export default function ExportPanel({
   startNumber,
   onStartNumberChange,
   towerCount,
+  rangeLength,
+  formatLength,
 }) {
   const canExport = fromTower && toTower
   const start = Number(startNumber) || 1
@@ -41,7 +43,11 @@ export default function ExportPanel({
         {/* Arrow / count */}
         <div className="range-arrow">
           {towerCount > 0
-            ? <><strong>{towerCount}</strong><span>towers</span></>
+            ? <>
+                <strong>{towerCount}</strong>
+                <span>towers</span>
+                <span className="range-distance">{formatLength(rangeLength)}</span>
+              </>
             : <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M5 12h14M13 6l6 6-6 6" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           }
         </div>
