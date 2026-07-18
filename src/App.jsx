@@ -92,8 +92,9 @@ export default function App() {
   }, [selectedLine])
 
   const rangeLabel = useCallback(() => {
-    const end = startNumber + Math.abs(toIdx - fromIdx)
-    return `T${startNumber}-T${end}`
+    const start = Number(startNumber) || 1
+    const end = start + Math.abs(toIdx - fromIdx)
+    return `T${start}-T${end}`
   }, [startNumber, fromIdx, toIdx])
 
   const handleExport = useCallback(() => {

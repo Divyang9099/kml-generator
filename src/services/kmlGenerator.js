@@ -23,13 +23,14 @@ export function formatLength(meters) {
 }
 
 export function generateKML(towers, fromIdx, toIdx, lineName, startNumber = 1) {
+  const start = Number(startNumber) || 1
   const lo = Math.min(fromIdx, toIdx)
   const hi = Math.max(fromIdx, toIdx)
   const slice = towers.slice(lo, hi + 1)
   const ordered = fromIdx > toIdx ? [...slice].reverse() : slice
   const selected = ordered.map((t, i) => ({
     ...t,
-    towerNumber: startNumber + i,
+    towerNumber: start + i,
   }))
   const from = selected[0]
   const to = selected[selected.length - 1]
@@ -98,13 +99,14 @@ ${placemarks}
 }
 
 export function generateCSV(towers, fromIdx, toIdx, lineName, startNumber = 1) {
+  const start = Number(startNumber) || 1
   const lo = Math.min(fromIdx, toIdx)
   const hi = Math.max(fromIdx, toIdx)
   const slice = towers.slice(lo, hi + 1)
   const ordered = fromIdx > toIdx ? [...slice].reverse() : slice
   const selected = ordered.map((t, i) => ({
     ...t,
-    towerNumber: startNumber + i,
+    towerNumber: start + i,
   }))
 
   const esc = (v) => {
