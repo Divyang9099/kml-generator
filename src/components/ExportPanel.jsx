@@ -84,6 +84,7 @@ export default function ExportPanel({
           type="number"
           min="0"
           value={startNumber}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => onStartNumberChange(e.target.value)}
         />
         {canExport && (
