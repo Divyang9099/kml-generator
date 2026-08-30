@@ -1,10 +1,18 @@
+// Overpass proxy. Runs as a Vercel function in production and is mounted on the
+// Vite dev server (see vite.config.js) so dev and prod take the identical path.
+// Browsers cannot talk to Overpass directly: a mirror that is failing returns
+// 429/500/504 *without* CORS headers, which surfaces as an unfixable CORS error.
 const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-  'https://overpass.openstreetmap.fr/api/interpreter',
 ]
+
+// vercel.json gives this function 60s. Stay inside it so the caller gets our
+// JSON error instead of the platform's opaque 504.
+const DEADLINE_MS = 55000
+const PER_MIRROR_MS = 25000
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -17,11 +25,11 @@ function readBody(req) {
   })
 }
 
-async function fetchMirror(url, query, timeoutMs = 20000) {
+async function fetchMirror(url, query, timeoutMs) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(url, {
+    return await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -30,11 +38,8 @@ async function fetchMirror(url, query, timeoutMs = 20000) {
       body: `data=${encodeURIComponent(query)}`,
       signal: controller.signal,
     })
+  } finally {
     clearTimeout(timer)
-    return res
-  } catch (e) {
-    clearTimeout(timer)
-    throw e
   }
 }
 
@@ -58,18 +63,28 @@ export default async function handler(req, res) {
   // Shuffle mirrors so load spreads across servers
   const shuffled = [...MIRRORS].sort(() => Math.random() - 0.5)
 
-  for (let i = 0; i < shuffled.length; i++) {
-    const url = shuffled[i]
-    try {
-      const upstream = await fetchMirror(url, query)
+  const startedAt = Date.now()
+  const timeLeft = () => DEADLINE_MS - (Date.now() - startedAt)
+  let busy = false
+  let lastStatus = null
 
-      if (upstream.status === 429 || upstream.status === 503) {
-        // Rate limited — wait then try next mirror
-        await sleep(800)
+  for (const url of shuffled) {
+    // Don't start an attempt we cannot finish inside the function budget.
+    if (timeLeft() < 5000) break
+
+    try {
+      const upstream = await fetchMirror(url, query, Math.min(PER_MIRROR_MS, timeLeft()))
+      lastStatus = upstream.status
+
+      // 429/503/504 mean the mirror is alive but loaded — worth reporting as
+      // "busy" so the user knows a retry will help.
+      if (upstream.status === 429 || upstream.status === 503 || upstream.status === 504) {
+        busy = true
+        await sleep(600)
         continue
       }
       if (!upstream.ok) {
-        await sleep(400)
+        await sleep(200)
         continue
       }
 
@@ -77,13 +92,15 @@ export default async function handler(req, res) {
       // Tell browser to cache identical queries for 5 min
       res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
       return res.status(200).json(data)
-    } catch (e) {
-      // Timeout or network error — try next mirror immediately
+    } catch {
+      // Timeout, abort or network error — try the next mirror
       continue
     }
   }
 
   return res.status(502).json({
-    error: 'All Overpass servers are busy right now. Please wait 10 seconds and retry.',
+    error: busy
+      ? 'Overpass servers are rate-limiting us right now. Wait ~15 seconds and retry.'
+      : `Could not reach any Overpass server${lastStatus ? ` (last status ${lastStatus})` : ''}. Please retry.`,
   })
 }

@@ -1,50 +1,19 @@
-const MIRRORS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-]
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-
-// In production (Vercel), browser→Overpass is blocked by CORS.
-// We route through our own serverless proxy at /api/overpass.
-// In local dev, direct fetch works fine (no CORS restriction on localhost).
+// Every Overpass call goes through our own proxy (a Vercel function in
+// production, the same handler mounted on the dev server locally). Calling
+// Overpass from the browser is not viable: a struggling mirror replies 429/500/
+// 504 with no CORS headers, so the browser reports a CORS error the app cannot
+// see or recover from. Server-side, the proxy falls back across mirrors freely.
 async function query(q) {
-  if (!import.meta.env.DEV) {
-    // Production: use Vercel serverless proxy
-    const res = await fetch('/api/overpass', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: q }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.error || `Server error: ${res.status}. Please retry.`)
-    }
-    return res.json()
+  const res = await fetch('/api/overpass', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: q }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Server error: ${res.status}. Please retry.`)
   }
-
-  // Dev: hit Overpass mirrors directly, rotating on 429/504
-  let lastError = null
-  for (const url of MIRRORS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(q)}`,
-        })
-        if (res.status === 429 || res.status === 504) {
-          lastError = new Error(`Server busy (${res.status})`)
-          await sleep(1200 * (attempt + 1))
-          continue
-        }
-        if (!res.ok) { lastError = new Error(`Overpass error: ${res.status}`); break }
-        return res.json()
-      } catch (e) { lastError = e; break }
-    }
-  }
-  throw new Error((lastError?.message || 'All Overpass servers busy') + '. Please retry.')
+  return res.json()
 }
 
 // Parse "relation:12345", "way:12345", or a plain number (unknown type)
@@ -86,9 +55,9 @@ out tags;`
 export async function fetchLineGeometry(type, id) {
   let q
   if (type === 'relation') {
-    q = `[out:json][timeout:90];relation(${id});out body;>;out skel qt;`
+    q = `[out:json][timeout:40];relation(${id});out body;>;out skel qt;`
   } else {
-    q = `[out:json][timeout:60];way(${id});out body;>;out skel qt;`
+    q = `[out:json][timeout:40];way(${id});out body;>;out skel qt;`
   }
 
   const data = await query(q)
