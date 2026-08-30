@@ -106,12 +106,17 @@ export default function MapView({ towers, fromIdx, toIdx, selectionMode, onTower
         zoomControl={true}
       >
         <LayersControl position="topright">
-          {/* ── Base maps ── */}
+          {/* ── Base maps — all key-free.
+              maxNativeZoom is each provider's deepest real tile level (Esri imagery
+              runs out at 18 over rural India, Esri street at 17); past it
+              Leaflet upscales instead of requesting levels that come back as
+              grey "Map data not yet available" placeholders. ── */}
           <BaseLayer name="Satellite (see real towers)">
             <TileLayer
               attribution='&copy; <a href="https://www.esri.com">Esri</a> World Imagery'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               maxZoom={20}
+              maxNativeZoom={18}
               keepBuffer={4}
               updateWhenZooming={false}
             />
@@ -119,10 +124,10 @@ export default function MapView({ towers, fromIdx, toIdx, selectionMode, onTower
 
           <BaseLayer checked name="Street (clean)">
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
+              attribution='&copy; <a href="https://www.esri.com">Esri</a> World Street Map'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
               maxZoom={20}
+              maxNativeZoom={17}
               keepBuffer={4}
               updateWhenZooming={false}
             />
@@ -131,8 +136,9 @@ export default function MapView({ towers, fromIdx, toIdx, selectionMode, onTower
           <BaseLayer name="OSM Standard (shows power lines + towers)">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              maxZoom={19}
+              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={20}
+              maxNativeZoom={19}
               keepBuffer={4}
               updateWhenZooming={false}
             />
