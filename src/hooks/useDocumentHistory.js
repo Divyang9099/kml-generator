@@ -52,8 +52,8 @@ function reducer(state, action) {
  * Selection and mode deliberately live outside it: stepping back through
  * "which tower was selected" would make undo feel random.
  */
-export default function useDocumentHistory(initialDoc) {
-  const [state, dispatch] = useReducer(reducer, { doc: initialDoc, past: [], future: [] })
+export default function useDocumentHistory(initialDoc, initialPast = []) {
+  const [state, dispatch] = useReducer(reducer, { doc: initialDoc, past: capPast(initialPast), future: [] })
 
   const commit = useCallback((doc) => dispatch({ type: 'commit', doc }), [])
   const setDoc = useCallback((doc) => dispatch({ type: 'set', doc }), [])
@@ -63,6 +63,7 @@ export default function useDocumentHistory(initialDoc) {
 
   return useMemo(() => ({
     doc: state.doc,
+    past: state.past,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     commit,
@@ -70,5 +71,5 @@ export default function useDocumentHistory(initialDoc) {
     undo,
     redo,
     reset,
-  }), [state.doc, state.past.length, state.future.length, commit, setDoc, undo, redo, reset])
+  }), [state.doc, state.past, state.future.length, commit, setDoc, undo, redo, reset])
 }

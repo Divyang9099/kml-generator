@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { sanitizeFilename } from '../services/saveFile.js'
 
-export default function SaveAsModal({ suggestedName, ext, count, onSave, onClose }) {
+export default function SaveAsModal({ suggestedName, ext, altExt, count, onSave, onClose }) {
+  const [chosenExt, setChosenExt] = useState(ext)
   // Offer the generated name without its extension — that is the part worth
   // editing, and re-typing ".kml" every time is noise.
   const initial = suggestedName.toLowerCase().endsWith(ext)
@@ -21,13 +22,13 @@ export default function SaveAsModal({ suggestedName, ext, count, onSave, onClose
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const finalName = sanitizeFilename(name, ext)
+  const finalName = sanitizeFilename(name, chosenExt)
   const empty = !name.trim()
 
   function submit(e) {
     e.preventDefault()
     if (empty) return
-    onSave(finalName)
+    onSave(finalName, chosenExt)
   }
 
   return (
@@ -61,10 +62,26 @@ export default function SaveAsModal({ suggestedName, ext, count, onSave, onClose
                 onChange={(e) => setName(e.target.value)}
                 placeholder="file name"
               />
-              <span className="field-ext">{ext}</span>
+              {altExt ? (
+                <div className="ext-toggle">
+                  {[ext, altExt].map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      className={`ext-opt${chosenExt === e ? ' ext-opt--on' : ''}`}
+                      onClick={() => setChosenExt(e)}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="field-ext">{chosenExt}</span>
+              )}
             </div>
             <span className="field-hint">
               Saves as <code>{finalName}</code>
+              {chosenExt === '.kmz' && ' — zipped, much smaller for a long line'}
             </span>
           </label>
 

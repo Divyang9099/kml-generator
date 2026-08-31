@@ -4,6 +4,10 @@
 
 const KEY = 'sarjanam.session.v1'
 const SAVE_DELAY = 400
+// Above this the history is dropped rather than the document — losing undo
+// steps is an inconvenience, losing the work is not.
+const MAX_BYTES = 2_000_000
+const KEEP_HISTORY = 10
 
 let timer = null
 
@@ -17,6 +21,7 @@ export function loadSession() {
       towers: Array.isArray(data.towers) ? data.towers : [],
       shapes: Array.isArray(data.shapes) ? data.shapes : [],
       selectedLine: data.selectedLine ?? null,
+      past: Array.isArray(data.past) ? data.past : [],
       mode: data.mode === 'draw' ? 'draw' : 'line',
       savedAt: data.savedAt ?? null,
     }
@@ -27,16 +32,28 @@ export function loadSession() {
 
 // Debounced: typing a name would otherwise serialise the whole document on
 // every keystroke.
+function write(session) {
+  try {
+    const payload = { ...session, past: (session.past ?? []).slice(-KEEP_HISTORY), savedAt: Date.now() }
+    let text = JSON.stringify(payload)
+    if (text.length > MAX_BYTES) text = JSON.stringify({ ...payload, past: [] })
+    localStorage.setItem(KEY, text)
+  } catch {
+    // Quota exceeded or storage blocked — nothing useful to do, and the
+    // document in memory is unaffected.
+  }
+}
+
 export function saveSession(session) {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ ...session, savedAt: Date.now() }))
-    } catch {
-      // Quota exceeded or storage blocked — nothing useful to do, and the
-      // document in memory is unaffected.
-    }
-  }, SAVE_DELAY)
+  timer = setTimeout(() => write(session), SAVE_DELAY)
+}
+
+// Writes now rather than in 400ms — for the moment the tab is closing, when a
+// pending debounce would never fire.
+export function flushSession(session) {
+  if (timer) clearTimeout(timer)
+  write(session)
 }
 
 export function clearSession() {

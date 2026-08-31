@@ -1,5 +1,11 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { displayNumber, resolveRange, hasCustomNumber } from '../services/towers.js'
+
+// Long lines are rendered through a scrolling window. Below this many towers
+// the whole list is cheap enough to render outright, and doing so keeps the
+// simpler code path for the common case.
+const VIRTUALIZE_ABOVE = 300
+const OVERSCAN = 10
 
 function towerStatus(idx, fromIdx, toIdx) {
   if (idx === fromIdx) return 'from'
@@ -28,20 +34,43 @@ export default function TowerList({
 
   const fromRef = useRef(null)
   const toRef   = useRef(null)
+  const scrollRef = useRef(null)
+  const rowRef = useRef(null)
 
-  useEffect(() => {
-    if (fromIdx !== null && fromRef.current) {
-      fromRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }
-  }, [fromIdx])
+  const [scrollTop, setScrollTop] = useState(0)
+  const [rowH, setRowH] = useState(34)
+  const [viewH, setViewH] = useState(320)
 
-  useEffect(() => {
-    if (toIdx !== null && toRef.current) {
-      toRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  const virtual = towers.length > VIRTUALIZE_ABOVE
+
+  // Row height is measured rather than assumed: edit mode makes rows taller,
+  // and a wrong guess would make the scrollbar drift.
+  useLayoutEffect(() => {
+    if (scrollRef.current) setViewH(scrollRef.current.clientHeight || 320)
+    const h = rowRef.current?.getBoundingClientRect().height
+    if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h)
+  }, [editMode, towers.length, rowH])
+
+  const scrollToIdx = (idx, ref) => {
+    if (idx === null) return
+    if (virtual && scrollRef.current) {
+      scrollRef.current.scrollTop = Math.max(0, idx * rowH - viewH / 2)
+    } else {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
-  }, [toIdx])
+  }
+
+  useEffect(() => { scrollToIdx(fromIdx, fromRef) }, [fromIdx])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { scrollToIdx(toIdx, toRef) }, [toIdx])         // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!towers.length) return null
+
+  const firstIdx = virtual ? Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN) : 0
+  const shown = virtual
+    ? Math.min(towers.length - firstIdx, Math.ceil(viewH / rowH) + OVERSCAN * 2)
+    : towers.length
+  const padTop = firstIdx * rowH
+  const padBottom = Math.max(0, (towers.length - firstIdx - shown) * rowH)
 
   return (
     <div className="tower-list">
@@ -62,8 +91,15 @@ export default function TowerList({
         </div>
       )}
 
-      <div className="tower-list-scroll">
-        {towers.map((tower, idx) => {
+      <div
+        className="tower-list-scroll"
+        ref={scrollRef}
+        onScroll={virtual ? (e) => setScrollTop(e.currentTarget.scrollTop) : undefined}
+      >
+        {padTop > 0 && <div style={{ height: padTop }} aria-hidden="true" />}
+
+        {towers.slice(firstIdx, firstIdx + shown).map((tower, i) => {
+          const idx = firstIdx + i
           const status = towerStatus(idx, fromIdx, toIdx)
           const num = displayNumber(tower, idx, range, startNumber)
           const renamed = num !== String(tower.towerNumber)
@@ -71,7 +107,11 @@ export default function TowerList({
           return (
             <div
               key={tower.uid}
-              ref={status === 'from' ? fromRef : status === 'to' ? toRef : null}
+              ref={(el) => {
+                if (i === 0) rowRef.current = el
+                if (status === 'from') fromRef.current = el
+                if (status === 'to') toRef.current = el
+              }}
               className={`tower-item tower-item--${status}`}
             >
               <button className="tower-item-main" onClick={() => onTowerClick(idx)}>
@@ -132,6 +172,8 @@ export default function TowerList({
             </div>
           )
         })}
+
+        {padBottom > 0 && <div style={{ height: padBottom }} aria-hidden="true" />}
       </div>
     </div>
   )

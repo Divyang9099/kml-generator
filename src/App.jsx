@@ -11,10 +11,10 @@ import SaveAsModal from './components/SaveAsModal.jsx'
 import useDocumentHistory from './hooks/useDocumentHistory.js'
 import { searchPowerLines, fetchLineGeometry } from './services/overpassApi.js'
 import { readTowerFile, readKmlText, baseName } from './services/kmlParser.js'
-import { generateShapeKML, parseShapeKML } from './services/shapeKml.js'
+import { generateShapeKML, generateShapeCSV, parseShapeKML } from './services/shapeKml.js'
 import { createShape, isComplete, radiusBetween, primeShapeCounter } from './services/shapes.js'
-import { loadSession, saveSession, clearSession, isEmptySession } from './services/storage.js'
-import { downloadAs, FILE_TYPES } from './services/saveFile.js'
+import { loadSession, saveSession, flushSession, clearSession, isEmptySession } from './services/storage.js'
+import { downloadAs, downloadBlob, toKmz, FILE_TYPES } from './services/saveFile.js'
 import { nextUid, insertionIndex, displayNumber, resolveRange, primeUidCounter } from './services/towers.js'
 import {
   generateKML,
@@ -37,11 +37,14 @@ export default function App() {
 
   // selectedLine belongs to the document, not to UI state: it is what the
   // loaded towers *are*, so undoing a Clear has to bring it back with them.
-  const { doc, commit, setDoc, undo, redo, canUndo, canRedo, reset } = useDocumentHistory({
-    towers: restored?.towers ?? [],
-    shapes: restored?.shapes ?? [],
-    selectedLine: restored?.selectedLine ?? null,
-  })
+  const { doc, past, commit, setDoc, undo, redo, canUndo, canRedo, reset } = useDocumentHistory(
+    {
+      towers: restored?.towers ?? [],
+      shapes: restored?.shapes ?? [],
+      selectedLine: restored?.selectedLine ?? null,
+    },
+    restored?.past ?? [], // so Ctrl+Z still reaches back past a reload
+  )
   const { towers, shapes, selectedLine } = doc
 
   const [mode, setMode]                   = useState(restored?.mode ?? 'line')
@@ -73,19 +76,21 @@ export default function App() {
   /* ── Session persistence ───────────────────────────────────────────── */
 
   useEffect(() => {
-    saveSession({ towers, shapes, selectedLine, mode })
-  }, [towers, shapes, selectedLine, mode])
+    saveSession({ towers, shapes, selectedLine, mode, past })
+  }, [towers, shapes, selectedLine, mode, past])
 
   // Closing the tab mid-edit should cost a confirmation, not the work.
   useEffect(() => {
     if (!towers.length && !shapes.length) return undefined
     const onBeforeUnload = (e) => {
+      // A debounced save would never fire once the tab is gone.
+      flushSession({ towers, shapes, selectedLine, mode, past })
       e.preventDefault()
       e.returnValue = ''
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [towers.length, shapes.length])
+  }, [towers, shapes, selectedLine, mode, past])
 
   const totalLength = useMemo(() => calcLength(towers), [towers])
   const rangeLength = useMemo(() => {
@@ -400,9 +405,24 @@ export default function App() {
     })
   }, [shapes, drawName])
 
-  const confirmSave = useCallback((filename) => {
+  const handleExportShapesCSV = useCallback(() => {
+    if (!shapes.length) return
+    const title = drawName || 'Custom KML'
+    setPendingSave({
+      content: generateShapeCSV(shapes),
+      suggestedName: `${title.replace(/[^ws-]/g, '').replace(/s+/g, '_')}.csv`,
+      kind: 'csv',
+      count: shapes.length,
+    })
+  }, [shapes, drawName])
+
+  const confirmSave = useCallback(async (filename, ext) => {
     if (!pendingSave) return
-    downloadAs(pendingSave.content, filename, FILE_TYPES[pendingSave.kind].mime)
+    if (ext === '.kmz') {
+      downloadBlob(await toKmz(pendingSave.content), filename)
+    } else {
+      downloadAs(pendingSave.content, filename, FILE_TYPES[pendingSave.kind].mime)
+    }
     setPendingSave(null)
   }, [pendingSave])
 
@@ -521,6 +541,7 @@ export default function App() {
               onDeleteShape={handleDeleteShape}
               onOpenFile={handleOpenShapeFile}
               onExport={handleExportShapes}
+          onExportCSV={handleExportShapesCSV}
               onClear={handleClearShapes}
               opening={opening}
             />
@@ -717,6 +738,7 @@ export default function App() {
         <SaveAsModal
           suggestedName={pendingSave.suggestedName}
           ext={FILE_TYPES[pendingSave.kind].ext}
+          altExt={FILE_TYPES[pendingSave.kind].alt}
           count={pendingSave.count}
           onSave={confirmSave}
           onClose={() => setPendingSave(null)}

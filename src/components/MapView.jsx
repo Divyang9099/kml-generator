@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   MapContainer,
   TileLayer,
@@ -70,60 +70,34 @@ function pinIcon(status) {
   return iconCache[status]
 }
 
-function TowerMarkers({
-  towers,
-  fromIdx,
-  toIdx,
-  onTowerClick,
-  startNumber,
-  editMode,
-  onTowerMove,
-  addMode,
-  onAddTower,
-  selectionMode,
-  onEditTower,
+// One tower. Memoised on purpose: toggling edit mode or hovering must not
+// re-render three thousand of these — that cost over 20 seconds on a long line.
+const TowerCircle = memo(function TowerCircle({
+  tower, idx, status, num, renamed, isFrom, isTo, onClick, onHover,
 }) {
-  const range = resolveRange(towers, fromIdx, toIdx)
+  let fillColor = '#ffffff'
+  let strokeColor = '#c2410c'
+  let radius = 5
+  if (status === 'range') { fillColor = '#dbeafe'; strokeColor = '#2563eb'; radius = 6 }
+  if (isFrom) { fillColor = '#22c55e'; strokeColor = '#15803d'; radius = 9 }
+  if (isTo)   { fillColor = '#ef4444'; strokeColor = '#b91c1c'; radius = 9 }
 
-  // Three behaviours compete for a click on a tower. Range selection has to win
-  // first, or arming "+ Select" would pop dialogs instead of letting you pick.
-  const handleClick = (idx) => (e) => {
-    if (selectionMode) {
-      onTowerClick(idx)
-      return
-    }
-    // Towers sit right on the line, so in add mode a click meant for the line
-    // usually lands on a marker. Add there rather than swallowing the click.
-    if (addMode) {
-      onAddTower(e.latlng.lat, e.latlng.lng)
-      return
-    }
-    onEditTower(towers[idx].uid)
-  }
-
-  return towers.map((tower, idx) => {
-    const isFrom = idx === fromIdx
-    const isTo = idx === toIdx
-    const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
-    const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
-    const inRange = lo !== null && idx > lo && idx < hi
-    const num = displayNumber(tower, idx, range, startNumber)
-    const renamed = num !== String(tower.towerNumber)
-
-    let status = 'default'
-    if (inRange) status = 'range'
-    if (isFrom) status = 'from'
-    if (isTo) status = 'to'
-
-    let fillColor = '#ffffff'
-    let strokeColor = '#c2410c'
-    let radius = 5
-
-    if (inRange) { fillColor = '#dbeafe'; strokeColor = '#2563eb'; radius = 6 }
-    if (isFrom)  { fillColor = '#22c55e'; strokeColor = '#15803d'; radius = 9 }
-    if (isTo)    { fillColor = '#ef4444'; strokeColor = '#b91c1c'; radius = 9 }
-
-    const tooltip = (
+  return (
+    <CircleMarker
+      center={[tower.lat, tower.lon]}
+      radius={radius}
+      pathOptions={{
+        color: strokeColor,
+        fillColor,
+        fillOpacity: 1,
+        weight: isFrom || isTo ? 3 : 2,
+      }}
+      eventHandlers={{
+        click: (e) => onClick(idx, e),
+        mouseover: (e) => { e.target.setRadius(radius + 3); onHover(tower.uid) },
+        mouseout: (e) => e.target.setRadius(radius),
+      }}
+    >
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div style={{ textAlign: 'center', lineHeight: 1.5 }}>
           <strong>Tower {num}</strong>
@@ -144,57 +118,116 @@ function TowerMarkers({
               {isFrom ? '▶ START' : '⬛ END'}
             </div>
           )}
-          {!selectionMode && !addMode && (
-            <div style={{ marginTop: 3, color: '#2563eb', fontSize: '10.5px', fontWeight: 700 }}>
-              ✎ click to edit{editMode ? ' · drag to move' : ''}
-            </div>
-          )}
+          {/* Deliberately unconditional: making this depend on the current mode
+              would re-render every tower each time a mode is toggled, which is
+              what made edit mode take 20 seconds on a long line. */}
+          <div style={{ marginTop: 3, color: '#2563eb', fontSize: '10.5px', fontWeight: 700 }}>
+            ✎ click to edit
+          </div>
         </div>
       </Tooltip>
-    )
+    </CircleMarker>
+  )
+})
 
-    if (editMode) {
-      return (
-        <Marker
-          key={tower.uid}
-          position={[tower.lat, tower.lon]}
-          icon={pinIcon(status)}
-          draggable={!addMode}
-          eventHandlers={{
-            click: handleClick(idx),
-            dragend: (e) => {
-              const { lat, lng } = e.target.getLatLng()
-              onTowerMove(tower.uid, lat, lng)
-            },
-          }}
-        >
-          {tooltip}
-        </Marker>
-      )
-    }
+function TowerMarkers({
+  towers,
+  fromIdx,
+  toIdx,
+  onTowerClick,
+  startNumber,
+  editMode,
+  onTowerMove,
+  addMode,
+  onAddTower,
+  selectionMode,
+  onEditTower,
+}) {
+  const range = resolveRange(towers, fromIdx, toIdx)
+
+  // Only the tower under the cursor gets a draggable Marker. Giving every tower
+  // one meant entering edit mode rebuilt every layer on the map.
+  const [dragUid, setDragUid] = useState(null)
+  useEffect(() => { if (!editMode) setDragUid(null) }, [editMode])
+
+  // The click and hover handlers read the current mode from a ref so their
+  // identity never changes — a new function each render would re-render every
+  // memoised tower and undo the whole point.
+  const modes = useRef({})
+  modes.current = { editMode, addMode, selectionMode, onTowerClick, onAddTower, onEditTower, towers }
+
+  const handleClick = useCallback((idx, e) => {
+    const m = modes.current
+    // Three behaviours compete for a click on a tower. Range selection has to
+    // win first, or arming "+ Select" would pop dialogs instead of letting you pick.
+    if (m.selectionMode) return m.onTowerClick(idx)
+    // Towers sit right on the line, so in add mode a click meant for the line
+    // usually lands on a marker. Add there rather than swallowing the click.
+    if (m.addMode) return m.onAddTower(e.latlng.lat, e.latlng.lng)
+    return m.onEditTower(m.towers[idx].uid)
+  }, [])
+
+  const handleHover = useCallback((uid) => {
+    if (modes.current.editMode) setDragUid(uid)
+  }, [])
+
+  const circles = towers.map((tower, idx) => {
+    const isFrom = idx === fromIdx
+    const isTo = idx === toIdx
+    const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
+    const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
+    const num = displayNumber(tower, idx, range, startNumber)
+
+    let status = 'default'
+    if (lo !== null && idx > lo && idx < hi) status = 'range'
+    if (isFrom) status = 'from'
+    if (isTo) status = 'to'
 
     return (
-      <CircleMarker
+      <TowerCircle
         key={tower.uid}
-        center={[tower.lat, tower.lon]}
-        radius={radius}
-        pathOptions={{
-          color: strokeColor,
-          fillColor,
-          fillOpacity: 1,
-          weight: isFrom || isTo ? 3 : 2,
-        }}
-        eventHandlers={{
-          click: handleClick(idx),
-          mouseover: e => e.target.setRadius(radius + 3),
-          mouseout:  e => e.target.setRadius(radius),
-        }}
-      >
-        {tooltip}
-      </CircleMarker>
+        tower={tower}
+        idx={idx}
+        status={status}
+        num={num}
+        renamed={num !== String(tower.towerNumber)}
+        isFrom={isFrom}
+        isTo={isTo}
+        onClick={handleClick}
+        onHover={handleHover}
+      />
     )
   })
+
+  const dragIdx = editMode && dragUid ? towers.findIndex(t => t.uid === dragUid) : -1
+  if (dragIdx === -1) return circles
+
+  const tower = towers[dragIdx]
+  const status = dragIdx === fromIdx ? 'from' : dragIdx === toIdx ? 'to' : 'default'
+  return [
+    ...circles,
+    <Marker
+      key={`drag-${tower.uid}`}
+      position={[tower.lat, tower.lon]}
+      icon={pinIcon(status)}
+      draggable={!addMode}
+      eventHandlers={{
+        click: (e) => handleClick(dragIdx, e),
+        dragend: (e) => {
+          const { lat, lng } = e.target.getLatLng()
+          onTowerMove(tower.uid, lat, lng)
+        },
+      }}
+    >
+      <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+        <strong>Tower {displayNumber(tower, dragIdx, range, startNumber)}</strong>
+        <br />
+        <span style={{ fontSize: '11px', color: '#64748b' }}>drag to move · click to edit</span>
+      </Tooltip>
+    </Marker>,
+  ]
 }
+
 
 export default function MapView({
   towers,

@@ -1,4 +1,5 @@
 import { nextUid } from './towers.js'
+import { getCachedLine, cacheLine } from './lineCache.js'
 
 // Every Overpass call goes through our own proxy (a Vercel function in
 // production, the same handler mounted on the dev server locally). Calling
@@ -55,6 +56,11 @@ out tags;`
 }
 
 export async function fetchLineGeometry(type, id) {
+  // A line already loaded once comes back without touching the network, which
+  // matters because Overpass rate-limits and is often slow in the field.
+  const cached = getCachedLine(type, id)
+  if (cached) return cached
+
   let q
   if (type === 'relation') {
     q = `[out:json][timeout:40];relation(${id});out body;>;out skel qt;`
@@ -63,7 +69,9 @@ export async function fetchLineGeometry(type, id) {
   }
 
   const data = await query(q)
-  return processElements(type, parseInt(id), data.elements)
+  const towers = processElements(type, parseInt(id), data.elements)
+  cacheLine(type, id, towers)
+  return towers
 }
 
 function processElements(type, id, elements) {

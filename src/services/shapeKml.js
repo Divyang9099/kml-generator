@@ -1,4 +1,8 @@
-import { createShape, outlineOf, measurementOf, PALETTE } from './shapes.js'
+import {
+  createShape, outlineOf, measurementOf, PALETTE,
+  areaOf, lengthOf, isBadRing, TYPE_LABEL,
+} from './shapes.js'
+import { SQM_PER_ACRE } from './geo.js'
 
 const xml = (v) =>
   String(v ?? '')
@@ -245,4 +249,40 @@ function centroid(coords) {
   const lat = coords.reduce((s, p) => s + p[0], 0) / coords.length
   const lon = coords.reduce((s, p) => s + p[1], 0) / coords.length
   return [lat, lon]
+}
+
+// A spreadsheet of what was drawn — the Draw workspace's counterpart to the
+// tower CSV, so shapes can be handed to someone who does not open KML.
+export function generateShapeCSV(shapes) {
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+
+  const header = [
+    'Name', 'Type', 'Points', 'Length (m)', 'Area (acres)',
+    'Centre Latitude', 'Centre Longitude', 'Colour', 'Description',
+  ]
+
+  const rows = shapes.map((s) => {
+    const pts = s.type === 'circle' ? s.coords : outlineOf(s)
+    const centre = pts.reduce(
+      (acc, [lat, lon]) => [acc[0] + lat / pts.length, acc[1] + lon / pts.length],
+      [0, 0]
+    )
+    const area = s.type === 'line' || s.type === 'point' || isBadRing(s) ? '' : areaOf(s) / SQM_PER_ACRE
+    return [
+      s.name?.trim() || TYPE_LABEL[s.type],
+      s.type,
+      s.type === 'circle' ? '' : s.coords.length,
+      s.type === 'point' ? '' : Math.round(lengthOf(s)),
+      area === '' ? '' : area.toFixed(3),
+      centre[0].toFixed(7),
+      centre[1].toFixed(7),
+      s.color,
+      s.description ?? '',
+    ]
+  })
+
+  return [header, ...rows].map((r) => r.map(esc).join(',')).join('\r\n')
 }

@@ -96,6 +96,11 @@ export function measurementOf(shape) {
     case 'circle':
       return `r ${formatLength(shape.radius)} · ${formatArea(areaOf(shape))}`
     default:
+      // Reporting an area for a ring that crosses itself would be a confident
+      // lie — the lobes cancel out and it comes to zero.
+      if (isBadRing(shape)) {
+        return `⚠ edges cross — area undefined · perimeter ${formatLength(lengthOf(shape))}`
+      }
       return `${formatArea(areaOf(shape))} · perimeter ${formatLength(lengthOf(shape))}`
   }
 }
@@ -114,3 +119,46 @@ export function radiusBetween(a, b) {
 }
 
 export { formatArea }
+
+// Do segments p1→p2 and p3→p4 cross? Standard orientation test; touching at a
+// shared endpoint does not count.
+function orient(a, b, c) {
+  const v = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1])
+  return v > 1e-12 ? 1 : v < -1e-12 ? -1 : 0
+}
+
+function segmentsCross(p1, p2, p3, p4) {
+  const d1 = orient(p3, p4, p1)
+  const d2 = orient(p3, p4, p2)
+  const d3 = orient(p1, p2, p3)
+  const d4 = orient(p1, p2, p4)
+  return d1 !== d2 && d3 !== d4
+}
+
+/**
+ * A ring that crosses itself — a "bow-tie". Its lobes cancel out in the
+ * signed-area formula, so it would otherwise report a confident 0 m² and
+ * export as invalid KML geometry.
+ *
+ * O(n²), so it is skipped on very large rings, where a hand-drawn mistake is
+ * not the realistic case anyway.
+ */
+export function isSelfIntersecting(coords) {
+  const n = coords?.length ?? 0
+  if (n < 4 || n > 300) return false
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      // Neighbouring segments share an endpoint; the first and last do too.
+      if (i === 0 && j === n - 1) continue
+      if (segmentsCross(coords[i], coords[(i + 1) % n], coords[j], coords[(j + 1) % n])) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// True only for shapes whose area is actually meaningful.
+export const isBadRing = (shape) =>
+  (shape.type === 'polygon') && isSelfIntersecting(shape.coords)

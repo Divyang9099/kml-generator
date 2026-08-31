@@ -32,6 +32,7 @@ export default function DrawPanel({
   onDeleteShape,
   onOpenFile,
   onExport,
+  onExportCSV,
   onClear,
   opening,
 }) {
@@ -85,14 +86,23 @@ export default function DrawPanel({
           </button>
           <button className="import-btn btn-clear" onClick={onClear} disabled={!shapes.length}>🗑 Clear</button>
         </div>
-        <button className="export-btn" onClick={onExport} disabled={!shapes.length}>
+        <div className="export-actions">
+          <button className="export-btn export-btn--csv" onClick={onExportCSV} disabled={!shapes.length}>
+            <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+              <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M3 8h14M8 8v9" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            Export CSV
+          </button>
+          <button className="export-btn" onClick={onExport} disabled={!shapes.length}>
           <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
             <path d="M10 3v10M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M3 16h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
           Export KML
           {shapes.length > 0 && <span className="export-btn-count">{shapes.length}</span>}
-        </button>
+          </button>
+        </div>
       </section>
 
       <div className="tower-list">

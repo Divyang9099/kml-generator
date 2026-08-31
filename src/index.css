@@ -1404,3 +1404,23 @@ svg { flex-shrink: 0; }
 /* Sits apart from the edit/undo group so a destructive action is never
    clicked by muscle memory aimed at Redo. */
 .edit-row .btn-clear { margin-left: auto; }
+
+/* .kml / .kmz picker in the save dialog */
+.ext-toggle {
+  display: flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.ext-opt {
+  border: none;
+  background: var(--white);
+  color: var(--text-3);
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.ext-opt--on { background: var(--primary); color: var(--white); }
