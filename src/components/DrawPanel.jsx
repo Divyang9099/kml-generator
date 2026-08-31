@@ -83,7 +83,7 @@ export default function DrawPanel({
           <button className="import-btn" onClick={() => fileRef.current?.click()} disabled={opening}>
             {opening ? <span className="spinner" /> : '📂'} {opening ? 'Opening…' : 'Open KML'}
           </button>
-          <button className="import-btn" onClick={onClear} disabled={!shapes.length}>🗑 Clear</button>
+          <button className="import-btn btn-clear" onClick={onClear} disabled={!shapes.length}>🗑 Clear</button>
         </div>
         <button className="export-btn" onClick={onExport} disabled={!shapes.length}>
           <svg viewBox="0 0 20 20" fill="none" width="16" height="16">

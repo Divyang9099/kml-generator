@@ -860,8 +860,6 @@ svg { flex-shrink: 0; }
   color: var(--white);
 }
 .edit-toggle--on:hover:not(:disabled) { background: #1d4ed8; }
-.edit-toggle--danger { color: var(--red); border-color: #fecaca; }
-.edit-toggle--danger:hover:not(:disabled) { background: var(--red-l); }
 .renumber-all-btn {
   background: none;
   border: none;
@@ -1356,3 +1354,53 @@ svg { flex-shrink: 0; }
   padding: 7px 9px;
   flex-shrink: 0;
 }
+
+/* ── Clear ────────────────────────────────────────────────
+   Destructive and easy to miss, so it gets one deliberate, high-contrast
+   look wherever it appears, instead of blending into its neighbours. */
+.btn-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--red-l);
+  border: 1.5px solid #fca5a5;
+  color: var(--red);
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 1;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+}
+.btn-clear:hover:not(:disabled) {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--white);
+  box-shadow: 0 1px 4px rgba(220,38,38,.35);
+}
+.btn-clear:disabled {
+  opacity: .45;
+  cursor: default;
+}
+/* The generic `.alert button` reset would otherwise strip this back to
+   faint borderless text. */
+.alert .btn-clear {
+  margin-left: auto;
+  padding: 5px 12px;
+  font-size: 12px;
+  /* `.alert button` is more specific than `.btn-clear` alone, so the look has
+     to be restated here or it reverts to faint borderless text. */
+  background: var(--red-l);
+  border: 1.5px solid #fca5a5;
+  color: var(--red);
+  opacity: 1;
+}
+.alert .btn-clear:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--white);
+}
+.alert .alert-dismiss { margin-left: 4px; }
+/* Sits apart from the edit/undo group so a destructive action is never
+   clicked by muscle memory aimed at Redo. */
+.edit-row .btn-clear { margin-left: auto; }

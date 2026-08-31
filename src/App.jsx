@@ -491,8 +491,8 @@ export default function App() {
           {restoredNote && (
             <div className="alert alert--info">
               <span>Restored your last session.</span>
-              <button onClick={handleClearEverything}>Clear</button>
-              <button onClick={() => setRestoredNote(false)}>✕</button>
+              <button className="btn-clear" onClick={handleClearEverything}>🗑 Clear</button>
+              <button className="alert-dismiss" onClick={() => setRestoredNote(false)}>✕</button>
             </div>
           )}
 

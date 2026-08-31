@@ -143,7 +143,7 @@ export default function ExportPanel({
         <button className="edit-toggle" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
           ↷ Redo
         </button>
-        <button className="edit-toggle edit-toggle--danger" onClick={onClear} title="Remove this line and start over">
+        <button className="edit-toggle btn-clear" onClick={onClear} title="Remove this line and start over">
           🗑 Clear
         </button>
       </div>
