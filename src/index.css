@@ -1254,6 +1254,82 @@ svg { flex-shrink: 0; }
 .modal-btn--danger { color: var(--red); border-color: #fecaca; }
 .modal-btn--danger:hover { background: var(--red-l); }
 
+/* ── Coordinate search (overlaid on the map) ──────────── */
+.coord-search {
+  position: absolute;
+  top: 12px;
+  left: 56px; /* clear of Leaflet's zoom buttons */
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  max-width: calc(100% - 120px);
+}
+.coord-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  padding: 5px 6px 5px 12px;
+}
+.coord-icon { flex-shrink: 0; }
+.coord-input {
+  width: 210px;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: transparent;
+}
+.coord-input::placeholder { color: var(--text-3); }
+.coord-go {
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.coord-go:disabled { background: var(--border-2); cursor: default; }
+.coord-go:hover:not(:disabled) { background: #1d4ed8; }
+.coord-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-family: monospace;
+  color: var(--text-2);
+}
+.coord-msg--error {
+  color: var(--red);
+  border-color: #fecaca;
+  background: var(--red-l);
+  font-family: inherit;
+  font-weight: 600;
+}
+.coord-clear {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.coord-clear:hover { color: var(--red); }
+
 /* ── Animations ───────────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }

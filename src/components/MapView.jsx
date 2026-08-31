@@ -13,6 +13,7 @@ import {
 import L from 'leaflet'
 import { displayNumber, resolveRange } from '../services/towers.js'
 import DrawLayer from './DrawLayer.jsx'
+import CoordinateSearch from './CoordinateSearch.jsx'
 
 const { BaseLayer } = LayersControl
 
@@ -30,6 +31,17 @@ function FitBounds({ towers, fitKey }) {
     }
   }, [fitKey, map])
 
+  return null
+}
+
+// Jump to a coordinate the user typed. Keyed on the point itself so entering
+// the same coordinates twice still re-centres the map.
+function FlyToPoint({ point }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!point) return
+    map.flyTo([point.lat, point.lon], Math.max(map.getZoom(), 16), { duration: 0.8 })
+  }, [point, map])
   return null
 }
 
@@ -214,6 +226,7 @@ export default function MapView({
   const rangePositions = lo !== null ? positions.slice(lo, hi + 1) : []
 
   const [dragOver, setDragOver] = useState(false)
+  const [coordPoint, setCoordPoint] = useState(null)
 
   // A click on the line never reaches the map underneath — Leaflet paths
   // swallow it — and clicking the line is the obvious way to add a tower to it.
@@ -267,6 +280,8 @@ export default function MapView({
         </div>
       )}
 
+      <CoordinateSearch point={coordPoint} onGo={setCoordPoint} onClear={() => setCoordPoint(null)} />
+
       {dragOver && <div className="map-drop-overlay">Drop the .kml or .kmz to load it</div>}
 
       <MapContainer
@@ -314,6 +329,19 @@ export default function MapView({
             />
           </BaseLayer>
         </LayersControl>
+
+        <FlyToPoint point={coordPoint} />
+        {coordPoint && (
+          <CircleMarker
+            center={[coordPoint.lat, coordPoint.lon]}
+            radius={6}
+            pathOptions={{ color: '#ffffff', weight: 2.5, fillColor: '#7c3aed', fillOpacity: 1 }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+              <strong>{coordPoint.lat.toFixed(6)}, {coordPoint.lon.toFixed(6)}</strong>
+            </Tooltip>
+          </CircleMarker>
+        )}
 
         {addMode && !drawMode && <AddTowerOnClick onAddTower={onAddTower} />}
 
