@@ -7,18 +7,18 @@ import ImportButton from './components/ImportButton.jsx'
 import TowerEditModal from './components/TowerEditModal.jsx'
 import DrawPanel from './components/DrawPanel.jsx'
 import ShapeEditModal from './components/ShapeEditModal.jsx'
+import SaveAsModal from './components/SaveAsModal.jsx'
 import useDocumentHistory from './hooks/useDocumentHistory.js'
 import { searchPowerLines, fetchLineGeometry } from './services/overpassApi.js'
 import { readTowerFile, readKmlText, baseName } from './services/kmlParser.js'
 import { generateShapeKML, parseShapeKML } from './services/shapeKml.js'
 import { createShape, isComplete, radiusBetween, primeShapeCounter } from './services/shapes.js'
 import { loadSession, saveSession, clearSession, isEmptySession } from './services/storage.js'
+import { downloadAs, FILE_TYPES } from './services/saveFile.js'
 import { nextUid, insertionIndex, displayNumber, resolveRange, primeUidCounter } from './services/towers.js'
 import {
   generateKML,
-  downloadKML,
   generateCSV,
-  downloadCSV,
   calcLength,
   formatLength,
   selectTowers,
@@ -66,6 +66,7 @@ export default function App() {
   const [editingShapeId, setEditingShapeId]   = useState(null)
   const [drawName, setDrawName]           = useState('Custom KML')
   const [opening, setOpening]             = useState(false)
+  const [pendingSave, setPendingSave]     = useState(null) // export waiting for a filename
 
   const drawing = mode === 'draw' && tool !== 'select'
 
@@ -313,16 +314,28 @@ export default function App() {
     return `T${clean(selected[0].towerNumber)}-T${clean(selected[selected.length - 1].towerNumber)}`
   }, [towers, fromIdx, toIdx, startNumber])
 
+  // Exports do not save straight away: they stage the content and let the user
+  // name the file first.
   const handleExport = useCallback(() => {
     if (!towers.length) return
     const name = selectedLine?.tags?.name || `Line ${selectedLine?.id}`
-    downloadKML(generateKML(towers, fromIdx, toIdx, name, startNumber), `${safeName()}_${rangeLabel()}.kml`)
+    setPendingSave({
+      content: generateKML(towers, fromIdx, toIdx, name, startNumber),
+      suggestedName: `${safeName()}_${rangeLabel()}.kml`,
+      kind: 'kml',
+      count: selectTowers(towers, fromIdx, toIdx, startNumber).length,
+    })
   }, [towers, fromIdx, toIdx, selectedLine, startNumber, safeName, rangeLabel])
 
   const handleExportCSV = useCallback(() => {
     if (!towers.length) return
     const name = selectedLine?.tags?.name || `Line ${selectedLine?.id}`
-    downloadCSV(generateCSV(towers, fromIdx, toIdx, name, startNumber), `${safeName()}_${rangeLabel()}.csv`)
+    setPendingSave({
+      content: generateCSV(towers, fromIdx, toIdx, name, startNumber),
+      suggestedName: `${safeName()}_${rangeLabel()}.csv`,
+      kind: 'csv',
+      count: selectTowers(towers, fromIdx, toIdx, startNumber).length,
+    })
   }, [towers, fromIdx, toIdx, selectedLine, startNumber, safeName, rangeLabel])
 
   /* ── Draw workspace ────────────────────────────────────────────────── */
@@ -378,9 +391,20 @@ export default function App() {
 
   const handleExportShapes = useCallback(() => {
     if (!shapes.length) return
-    const file = (drawName || 'Custom KML').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')
-    downloadKML(generateShapeKML(shapes, drawName || 'Custom KML'), `${file}.kml`)
+    const title = drawName || 'Custom KML'
+    setPendingSave({
+      content: generateShapeKML(shapes, title),
+      suggestedName: `${title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')}.kml`,
+      kind: 'kml',
+      count: shapes.length,
+    })
   }, [shapes, drawName])
+
+  const confirmSave = useCallback((filename) => {
+    if (!pendingSave) return
+    downloadAs(pendingSave.content, filename, FILE_TYPES[pendingSave.kind].mime)
+    setPendingSave(null)
+  }, [pendingSave])
 
   const handleClearShapes = useCallback(() => {
     if (!window.confirm(`Delete all ${shapes.length} drawn features? Ctrl+Z brings them back.`)) return
@@ -686,6 +710,16 @@ export default function App() {
           onSave={handleSaveShape}
           onDelete={handleDeleteShape}
           onClose={() => setEditingShapeId(null)}
+        />
+      )}
+
+      {pendingSave && (
+        <SaveAsModal
+          suggestedName={pendingSave.suggestedName}
+          ext={FILE_TYPES[pendingSave.kind].ext}
+          count={pendingSave.count}
+          onSave={confirmSave}
+          onClose={() => setPendingSave(null)}
         />
       )}
     </div>
