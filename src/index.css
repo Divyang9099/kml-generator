@@ -550,8 +550,9 @@ svg { flex-shrink: 0; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  flex: 1;
-  min-height: 0;
+  /* Never shrink: the scroll area below is already capped, and letting this
+     flex meant a tall panel above squeezed the list down to its header. */
+  flex: 0 0 auto;
 }
 
 .tower-list-header {
@@ -732,7 +733,536 @@ svg { flex-shrink: 0; }
 
 .leaflet-container { font-family: inherit; }
 
+/* ── Import ───────────────────────────────────────────── */
+.import-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.import-input { display: none; }
+.import-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--white);
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, border-color .1s, color .1s;
+}
+.import-btn:hover:not(:disabled) {
+  background: var(--primary-l);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.import-btn:disabled { opacity: .6; cursor: default; }
+.import-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.type-pill--kml { background: #fef3c7; color: #b45309; }
+
+/* ── Tower row editing ────────────────────────────────── */
+.tower-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tower-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.tower-num-input {
+  width: 58px;
+  border: 1.5px solid var(--border-2);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--primary);
+  outline: none;
+  text-align: center;
+  background: var(--white);
+}
+.tower-num-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37,99,235,.14);
+}
+.tower-row-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tower-row-btn:hover { background: var(--bg); color: var(--text-2); }
+.tower-row-btn--del:hover {
+  background: var(--red-l);
+  color: var(--red);
+  border-color: #fca5a5;
+}
+.tower-list-hint--edit {
+  color: var(--amber);
+  background: #fffbeb;
+  border-bottom-color: #fde68a;
+}
+
+/* ── Edit mode controls ───────────────────────────────── */
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.edit-toggle {
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.edit-toggle:hover:not(:disabled) { background: #f1f5f9; }
+.edit-toggle:disabled { opacity: .5; cursor: default; }
+.edit-toggle--on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+.edit-toggle--on:hover:not(:disabled) { background: #1d4ed8; }
+.edit-toggle--danger { color: var(--red); border-color: #fecaca; }
+.edit-toggle--danger:hover:not(:disabled) { background: var(--red-l); }
+.renumber-all-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.renumber-all-btn:disabled { color: var(--text-3); cursor: default; text-decoration: none; }
+.export-btn-count {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .75;
+}
+
+/* ── Map: add mode, drag-and-drop, draggable pins ─────── */
+.map-wrap--adding .leaflet-container { cursor: crosshair; }
+.map-hint--add { color: var(--primary); border-color: #93c5fd; }
+.map-drop-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(37,99,235,.10);
+  border: 3px dashed var(--primary);
+  border-radius: var(--radius);
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 800;
+  pointer-events: none;
+}
+/* Leaflet swaps circles for these div icons in edit mode, so they must match
+   the CircleMarker colours exactly. */
+.tower-pin {
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #c2410c;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+  cursor: grab;
+}
+.tower-pin:active { cursor: grabbing; }
+.tower-pin--range { background: #dbeafe; border-color: #2563eb; }
+.tower-pin--from  { background: #22c55e; border-color: #15803d; }
+.tower-pin--to    { background: #ef4444; border-color: #b91c1c; }
+
+/* ── Mode tabs ────────────────────────────────────────── */
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.mode-tab {
+  flex: 1;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 7px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.mode-tab:hover { background: #f1f5f9; }
+.mode-tab--on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+.mode-tab--on:hover { background: #1d4ed8; }
+
+/* ── Drawing tools ────────────────────────────────────── */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  padding: 9px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.tool-btn:hover { background: var(--bg); }
+.tool-btn--on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+.tool-icon { font-size: 15px; line-height: 1; }
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--blue-l);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+.draft-count { font-size: 12px; font-weight: 700; color: var(--primary); }
+.draft-actions { display: flex; gap: 6px; }
+
+.shape-empty {
+  padding: 18px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.shape-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.shape-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.shape-name {
+  font-weight: 700;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shape-type {
+  margin-left: 5px;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.shape-measure {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Vertex handles on the selected shape. Leaflet replaces its default
+   div-icon class when one is supplied, so these need no reset. */
+.vertex-handle {
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--white);
+  border: 2px solid var(--primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+  cursor: grab;
+}
+.vertex-handle:active { cursor: grabbing; }
+.vertex-handle--mid {
+  border-style: dashed;
+  opacity: .65;
+  cursor: copy;
+}
+.vertex-handle--mid:hover { opacity: 1; }
+
+.field-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.5;
+}
+.swatch-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+  cursor: pointer;
+}
+.swatch--on {
+  border-color: var(--text);
+  transform: scale(1.06);
+}
+
+/* ── Per-row edit button ──────────────────────────────── */
+.tower-edit-btn {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.tower-item:hover .tower-edit-btn { opacity: 1; }
+.tower-edit-btn:focus-visible { opacity: 1; }
+.tower-edit-btn:hover {
+  background: var(--primary-l);
+  border-color: #bfdbfe;
+  color: var(--primary);
+}
+
+/* ── Tower edit dialog ────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .45);
+  animation: fade-in .12s ease-out;
+}
+.modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.28);
+  animation: pop-in .14s ease-out;
+}
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.modal-subtitle {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-family: monospace;
+}
+.modal-close {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.modal-close:hover { background: var(--bg); color: var(--text); }
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.field-optional {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+.field-row { display: flex; align-items: center; gap: 8px; }
+.field-input {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  background: var(--white);
+}
+.field-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+.field-input--bad {
+  border-color: var(--red);
+  background: var(--red-l);
+}
+.field-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.field-btn:hover { background: #f1f5f9; }
+.field-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.field-hint code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-family: monospace;
+  color: var(--primary);
+}
+.modal-error {
+  background: var(--red-l);
+  border: 1px solid #fecaca;
+  color: var(--red);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+.modal-actions-right { display: flex; gap: 8px; }
+.modal-btn {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.modal-btn:hover { background: var(--bg); }
+.modal-btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+.modal-btn--primary:hover { background: #1d4ed8; }
+.modal-btn--primary:disabled {
+  background: var(--border-2);
+  border-color: var(--border-2);
+  cursor: default;
+}
+.modal-btn--danger { color: var(--red); border-color: #fecaca; }
+.modal-btn--danger:hover { background: var(--red-l); }
+
 /* ── Animations ───────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

@@ -11,10 +11,24 @@ export default function ExportPanel({
   towerCount,
   rangeLength,
   formatLength,
+  totalTowers = 0,
+  editMode = false,
+  onToggleEdit,
+  addMode = false,
+  onToggleAdd,
+  canUndo = false,
+  onUndo,
+  canRedo = false,
+  onRedo,
+  onClear,
+  onSelectAll,
 }) {
-  const canExport = fromTower && toTower
+  const hasRange = Boolean(fromTower && toTower)
+  // A range narrows the export; without one the whole line goes out.
+  const canExport = totalTowers > 0
+  const exportCount = hasRange ? towerCount : totalTowers
   const start = Number(startNumber) || 1
-  const endNumber = canExport ? start + towerCount - 1 : start
+  const endNumber = start + Math.max(exportCount - 1, 0)
 
   return (
     <div className="export-panel">
@@ -87,15 +101,55 @@ export default function ExportPanel({
           onFocus={(e) => e.target.select()}
           onChange={(e) => onStartNumberChange(e.target.value)}
         />
-        {canExport && (
+        {hasRange ? (
           <span className="renumber-preview">
             → exports as <strong>T{start}</strong> to <strong>T{endNumber}</strong>
           </span>
+        ) : (
+          // Renumbering only ever touches a chosen range, so that loading a
+          // file does not silently rewrite the numbering it came with.
+          <button className="renumber-all-btn" onClick={onSelectAll} disabled={!totalTowers}>
+            apply to all {totalTowers}
+          </button>
         )}
       </div>
 
+      {/* Editing */}
+      <div className="edit-row">
+        <button
+          className={`edit-toggle${editMode ? ' edit-toggle--on' : ''}`}
+          onClick={onToggleEdit}
+          disabled={!totalTowers}
+        >
+          ✎ {editMode ? 'Done editing' : 'Edit towers'}
+        </button>
+
+        {editMode && (
+          <>
+            <button
+              className={`edit-toggle${addMode ? ' edit-toggle--on' : ''}`}
+              onClick={onToggleAdd}
+            >
+              ➕ {addMode ? 'Click map…' : 'Add tower'}
+            </button>
+          </>
+        )}
+
+        {/* Undo/redo are app-wide (Ctrl+Z / Ctrl+Y), so they stay visible
+            whether or not edit mode is on. */}
+        <button className="edit-toggle" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+          ↶ Undo
+        </button>
+        <button className="edit-toggle" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+          ↷ Redo
+        </button>
+        <button className="edit-toggle edit-toggle--danger" onClick={onClear} title="Remove this line and start over">
+          🗑 Clear
+        </button>
+      </div>
+
       <div className="export-actions">
-        {canExport && (
+        {hasRange && (
           <button className="reset-btn" onClick={onReset}>
             Reset
           </button>
@@ -120,7 +174,7 @@ export default function ExportPanel({
             <path d="M10 3v10M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M3 16h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          Export KML
+          Export KML{canExport && <span className="export-btn-count">{hasRange ? `${exportCount}` : `all ${exportCount}`}</span>}
         </button>
       </div>
     </div>

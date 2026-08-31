@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import { displayNumber, resolveRange, hasCustomNumber } from '../services/towers.js'
 
 function towerStatus(idx, fromIdx, toIdx) {
   if (idx === fromIdx) return 'from'
@@ -11,13 +12,19 @@ function towerStatus(idx, fromIdx, toIdx) {
   return 'default'
 }
 
-export default function TowerList({ towers, fromIdx, toIdx, onTowerClick, selectionMode, startNumber = 1 }) {
-  const inRange = (idx) => {
-    if (fromIdx === null || toIdx === null) return false
-    return idx >= Math.min(fromIdx, toIdx) && idx <= Math.max(fromIdx, toIdx)
-  }
-  const displayNum = (idx) =>
-    inRange(idx) ? (Number(startNumber) || 1) + Math.abs(idx - fromIdx) : towers[idx].towerNumber
+export default function TowerList({
+  towers,
+  fromIdx,
+  toIdx,
+  onTowerClick,
+  selectionMode,
+  startNumber = 1,
+  editMode = false,
+  onNumberChange,
+  onDeleteTower,
+  onEditTower,
+}) {
+  const range = resolveRange(towers, fromIdx, toIdx)
 
   const fromRef = useRef(null)
   const toRef   = useRef(null)
@@ -49,36 +56,80 @@ export default function TowerList({ towers, fromIdx, toIdx, onTowerClick, select
         </div>
       )}
 
+      {editMode && !selectionMode && (
+        <div className="tower-list-hint tower-list-hint--edit">
+          Type a number to rename a tower · ✕ deletes it
+        </div>
+      )}
+
       <div className="tower-list-scroll">
         {towers.map((tower, idx) => {
           const status = towerStatus(idx, fromIdx, toIdx)
-          const isActive = status === 'from' || status === 'to'
+          const num = displayNumber(tower, idx, range, startNumber)
+          const renamed = num !== String(tower.towerNumber)
 
           return (
-            <button
-              key={tower.osmId}
+            <div
+              key={tower.uid}
               ref={status === 'from' ? fromRef : status === 'to' ? toRef : null}
               className={`tower-item tower-item--${status}`}
-              onClick={() => onTowerClick(idx)}
             >
-              <span className={`tower-dot tower-dot--${status}`} />
+              <button className="tower-item-main" onClick={() => onTowerClick(idx)}>
+                <span className={`tower-dot tower-dot--${status}`} />
 
-              <span className="tower-num">
-                T{displayNum(idx)}
-                {inRange(idx) && tower.towerNumber !== displayNum(idx) && (
-                  <span className="tower-orig">({tower.towerNumber})</span>
-                )}
-              </span>
+                <span className="tower-num">
+                  T{num}
+                  {renamed && <span className="tower-orig">({tower.towerNumber})</span>}
+                </span>
 
-              <span className="tower-coords">
-                {tower.lat.toFixed(5)}, {tower.lon.toFixed(5)}
-              </span>
+                <span className="tower-coords">
+                  {tower.lat.toFixed(5)}, {tower.lon.toFixed(5)}
+                </span>
 
-              <span className="tower-osm">#{tower.osmId}</span>
+                {tower.osmId && <span className="tower-osm">#{tower.osmId}</span>}
 
-              {status === 'from' && <span className="tower-badge tower-badge--from">START</span>}
-              {status === 'to'   && <span className="tower-badge tower-badge--to">END</span>}
-            </button>
+                {status === 'from' && <span className="tower-badge tower-badge--from">START</span>}
+                {status === 'to'   && <span className="tower-badge tower-badge--to">END</span>}
+              </button>
+
+              {/* Always available, revealed on row hover — the discoverable way in. */}
+              <button
+                className="tower-edit-btn"
+                title="Edit this tower"
+                onClick={() => onEditTower(tower.uid)}
+              >
+                ✎
+              </button>
+
+              {editMode && (
+                <div className="tower-edit">
+                  <input
+                    className="tower-num-input"
+                    value={tower.customNumber ?? ''}
+                    placeholder={num}
+                    title="Set this tower's number"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => onNumberChange(tower.uid, e.target.value)}
+                  />
+                  {hasCustomNumber(tower) && (
+                    <button
+                      className="tower-row-btn"
+                      title="Clear custom number"
+                      onClick={() => onNumberChange(tower.uid, '')}
+                    >
+                      ↺
+                    </button>
+                  )}
+                  <button
+                    className="tower-row-btn tower-row-btn--del"
+                    title="Delete this tower"
+                    onClick={() => onDeleteTower(tower.uid)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           )
         })}
       </div>

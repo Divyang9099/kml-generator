@@ -1,3 +1,5 @@
+import { nextUid } from './towers.js'
+
 // Every Overpass call goes through our own proxy (a Vercel function in
 // production, the same handler mounted on the dev server locally). Calling
 // Overpass from the browser is not viable: a struggling mirror replies 429/500/
@@ -98,6 +100,7 @@ function processElements(type, id, elements) {
   return orderedNodeIds
     .filter(nid => nodeMap[nid])
     .map((nid, i) => ({
+      uid: nextUid(),
       towerNumber: i + 1,
       osmId: nid,
       lat: nodeMap[nid].lat,
