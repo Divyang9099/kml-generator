@@ -15,7 +15,7 @@ export default function ImportButton({ onImport, importing }) {
       <input
         ref={inputRef}
         type="file"
-        accept=".kml,.kmz"
+        accept=".kml,.kmz,.csv,.txt"
         className="import-input"
         onChange={handleChange}
       />
@@ -32,9 +32,9 @@ export default function ImportButton({ onImport, importing }) {
             <path d="M3 16h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         )}
-        {importing ? 'Reading file…' : 'Import KML'}
+        {importing ? 'Reading file…' : 'Import KML / CSV'}
       </button>
-      <span className="import-hint">or drop a .kml / .kmz on the map</span>
+      <span className="import-hint">or drop a .kml / .kmz / .csv on the map</span>
     </div>
   )
 }

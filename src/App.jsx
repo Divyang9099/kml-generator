@@ -7,11 +7,14 @@ import ImportButton from './components/ImportButton.jsx'
 import TowerEditModal from './components/TowerEditModal.jsx'
 import DrawPanel from './components/DrawPanel.jsx'
 import ShapeEditModal from './components/ShapeEditModal.jsx'
+import BufferModal from './components/BufferModal.jsx'
 import SaveAsModal from './components/SaveAsModal.jsx'
 import useDocumentHistory from './hooks/useDocumentHistory.js'
 import { searchPowerLines, fetchLineGeometry } from './services/overpassApi.js'
-import { readTowerFile, readKmlText, baseName } from './services/kmlParser.js'
+import { readTowerFile, readKmlText, baseName, isCsvFile } from './services/kmlParser.js'
 import { generateShapeKML, generateShapeCSV, parseShapeKML } from './services/shapeKml.js'
+import { parseCSVShapes } from './services/csvImport.js'
+import { bufferShape } from './services/buffer.js'
 import { createShape, isComplete, radiusBetween, primeShapeCounter } from './services/shapes.js'
 import { loadSession, saveSession, flushSession, clearSession, isEmptySession } from './services/storage.js'
 import { downloadAs, downloadBlob, toKmz, FILE_TYPES } from './services/saveFile.js'
@@ -56,6 +59,7 @@ export default function App() {
   const [selectionMode, setSelectionMode] = useState(null) // 'from' | 'to' | null
   const [startNumber, setStartNumber]     = useState(1)     // custom renumber start
   const [error, setError]                 = useState(null)
+  const [notice, setNotice]               = useState(null) // non-fatal info, e.g. "skipped 2 rows"
   const [importing, setImporting]         = useState(false)
   const [editMode, setEditMode]           = useState(false)
   const [addMode, setAddMode]             = useState(false)
@@ -69,6 +73,7 @@ export default function App() {
   const [editingShapeId, setEditingShapeId]   = useState(null)
   const [drawName, setDrawName]           = useState('Custom KML')
   const [opening, setOpening]             = useState(false)
+  const [bufferingShapeId, setBufferingShapeId] = useState(null)
   const [pendingSave, setPendingSave]     = useState(null) // export waiting for a filename
 
   const drawing = mode === 'draw' && tool !== 'select'
@@ -212,11 +217,16 @@ export default function App() {
     setSearchResults([])
     resetForNewLine()
     setImporting(true)
+    setNotice(null)
     try {
-      const { name, towers: parsed } = await readTowerFile(file)
+      // readTowerFile reads KML/KMZ as before, and a .csv/.txt straight through
+      // the CSV analyser — the file extension is all that decides which.
+      const { name, towers: parsed, notes } = await readTowerFile(file)
       // A synthetic "line" so every existing panel renders an imported file
       // exactly as it renders one loaded from OpenStreetMap.
-      reset({ towers: parsed, shapes, selectedLine: { type: 'kml', id: file.name, tags: { name } } })
+      const badge = isCsvFile(file) ? 'csv' : 'kml'
+      reset({ towers: parsed, shapes, selectedLine: { type: badge, id: file.name, tags: { name } } })
+      if (notes?.length) setNotice(notes.join(' '))
     } catch (e) {
       reset({ towers: [], shapes, selectedLine: null })
       setError('Could not import that file: ' + e.message)
@@ -376,17 +386,59 @@ export default function App() {
     setEditingShapeId(null)
   }, [commit])
 
+  // Every dropped point joins one line, in the order they sit in the list —
+  // the order they were placed or imported in, which is what "join them up"
+  // means for hand-drawn points. Switching to Select is what makes the new
+  // line's vertices draggable right away — a shape only takes drag handles
+  // while Select is the active tool, and whatever tool was last armed (Point,
+  // say) would otherwise leave it looking stuck.
+  const handlePointsToLine = useCallback(() => {
+    const points = shapes.filter(s => s.type === 'point')
+    if (points.length < 2) return
+    const line = createShape('line', points.map(p => p.coords[0]))
+    commit(d => ({ ...d, shapes: [...d.shapes.filter(s => s.type !== 'point'), line] }))
+    setTool('select')
+    setSelectedShapeId(line.id)
+  }, [shapes, commit])
+
+  const bufferingShape = shapes.find(s => s.id === bufferingShapeId) || null
+
+  const handleConfirmBuffer = useCallback(async (meters) => {
+    const shape = shapes.find(s => s.id === bufferingShapeId)
+    if (!shape) return
+    const rings = await bufferShape(shape, meters)
+    const label = shape.name?.trim() || shape.type
+    const built = rings.map(r => createShape(r.type, r.coords, {
+      name: `${label} +${meters}m`,
+      color: shape.color,
+      ...(r.holes ? { holes: r.holes } : {}),
+      ...(r.radius != null ? { radius: r.radius } : {}),
+    }))
+    commit(d => ({ ...d, shapes: [...d.shapes, ...built] }))
+    setTool('select')
+    setSelectedShapeId(built[0]?.id ?? null)
+    setBufferingShapeId(null)
+  }, [shapes, bufferingShapeId, commit])
+
   const handleOpenShapeFile = useCallback(async (file) => {
     setOpening(true)
     setError(null)
+    setNotice(null)
     try {
-      const { name, shapes: parsed } = parseShapeKML(await readKmlText(file), baseName(file.name))
+      const { name, shapes: parsed, notes } = isCsvFile(file)
+        ? parseCSVShapes(await file.text(), baseName(file.name))
+        : parseShapeKML(await readKmlText(file), baseName(file.name))
       // Open replaces what is on the canvas, the way opening a file anywhere
       // else does. It goes through commit, so Ctrl+Z brings back the old work.
       commit(d => ({ ...d, shapes: parsed }))
       setDrawName(name)
+      // Whatever tool was last armed (Point, Line…) leaves every shape locked
+      // — a shape only gets drag handles while Select is active — so a fresh
+      // import always lands ready to click and drag, not looking stuck.
+      setTool('select')
       setSelectedShapeId(null)
       setRestoredNote(false)
+      if (notes?.length) setNotice(notes.join(' '))
     } catch (e) {
       setError('Could not open that file: ' + e.message)
     } finally {
@@ -410,7 +462,7 @@ export default function App() {
     const title = drawName || 'Custom KML'
     setPendingSave({
       content: generateShapeCSV(shapes),
-      suggestedName: `${title.replace(/[^ws-]/g, '').replace(/s+/g, '_')}.csv`,
+      suggestedName: `${title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')}.csv`,
       kind: 'csv',
       count: shapes.length,
     })
@@ -527,6 +579,13 @@ export default function App() {
             </div>
           )}
 
+          {notice && (
+            <div className="alert alert--info">
+              <span>{notice}</span>
+              <button className="alert-dismiss" onClick={() => setNotice(null)}>✕</button>
+            </div>
+          )}
+
           {mode === 'draw' ? (
             <DrawPanel
               shapes={shapes}
@@ -539,10 +598,12 @@ export default function App() {
               onSelect={setSelectedShapeId}
               onEditShape={setEditingShapeId}
               onDeleteShape={handleDeleteShape}
+              onBufferShape={setBufferingShapeId}
               onOpenFile={handleOpenShapeFile}
               onExport={handleExportShapes}
           onExportCSV={handleExportShapesCSV}
               onClear={handleClearShapes}
+              onPointsToLine={handlePointsToLine}
               opening={opening}
             />
           ) : (
@@ -693,7 +754,7 @@ export default function App() {
           addMode={addMode}
           onTowerMove={handleTowerMove}
           onAddTower={handleAddTower}
-          onImportFile={handleImportFile}
+          onImportFile={mode === 'draw' ? handleOpenShapeFile : handleImportFile}
           onEditTower={setEditingUid}
           drawMode={mode === 'draw'}
           shapes={shapes}
@@ -731,6 +792,15 @@ export default function App() {
           onSave={handleSaveShape}
           onDelete={handleDeleteShape}
           onClose={() => setEditingShapeId(null)}
+        />
+      )}
+
+      {bufferingShape && (
+        <BufferModal
+          key={bufferingShape.id}
+          shape={bufferingShape}
+          onConfirm={handleConfirmBuffer}
+          onClose={() => setBufferingShapeId(null)}
         />
       )}
 

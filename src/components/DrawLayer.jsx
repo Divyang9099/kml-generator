@@ -10,7 +10,7 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { outlineOf, measurementOf, radiusBetween } from '../services/shapes.js'
+import { outlineOf, ringsOf, measurementOf, radiusBetween, MIN_VERTICES } from '../services/shapes.js'
 import { destination } from '../services/geo.js'
 
 const handleIcon = L.divIcon({ className: 'vertex-handle', iconSize: [12, 12], iconAnchor: [6, 6] })
@@ -96,23 +96,43 @@ function ShapeGeometry({ shape, selected, onSelect, interactive }) {
   }
 
   return (
-    <Polygon positions={outlineOf(shape)} pathOptions={options} eventHandlers={handlers}>
+    <Polygon positions={ringsOf(shape)} pathOptions={options} eventHandlers={handlers}>
       {label}
     </Polygon>
   )
 }
 
 // Draggable vertices for the selected shape, plus midpoint dots that insert a
-// new vertex where you click them.
+// new vertex where you click them. A line or polygon above its minimum vertex
+// count can also lose one, by double-clicking its handle.
 function VertexHandles({ shape, onShapePatch }) {
+  const min = MIN_VERTICES[shape.type] ?? shape.coords.length
+  const removable = shape.coords.length > min
+
   const move = (i) => (e) => {
     const { lat, lng } = e.target.getLatLng()
     const next = shape.coords.map((c, idx) => (idx === i ? [lat, lng] : c))
     onShapePatch(shape.id, { coords: next })
   }
 
+  const remove = (i) => (e) => {
+    if (!removable) return
+    L.DomEvent.stop(e) // otherwise this dbl-click reaches the map underneath as a zoom
+    onShapePatch(shape.id, { coords: shape.coords.filter((_, idx) => idx !== i) })
+  }
+
   const handles = shape.coords.map((c, i) => (
-    <Marker key={`v${i}`} position={c} icon={handleIcon} draggable eventHandlers={{ dragend: move(i) }} />
+    <Marker
+      key={`v${i}`}
+      position={c}
+      icon={handleIcon}
+      draggable
+      eventHandlers={{ dragend: move(i), dblclick: remove(i) }}
+    >
+      {removable && (
+        <Tooltip direction="top" offset={[0, -8]} opacity={1}>Double-click to remove</Tooltip>
+      )}
+    </Marker>
   ))
 
   // A circle is a centre and a radius, so it needs a second handle on its edge

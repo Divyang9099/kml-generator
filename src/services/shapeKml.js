@@ -47,9 +47,10 @@ function geometryFor(shape) {
   }
   // KML has no rectangle or circle — both go out as closed polygons, which is
   // what every reader expects and what Google Earth draws.
-  const ring = outlineOf(shape)
-  const closed = [...ring, ring[0]]
-  return `<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${coordString(closed)}</coordinates></LinearRing></outerBoundaryIs></Polygon>`
+  const ring = (r) => `<LinearRing><coordinates>${coordString([...r, r[0]])}</coordinates></LinearRing>`
+  const holes = shape.type === 'polygon' ? shape.holes ?? [] : []
+  const inner = holes.map((h) => `<innerBoundaryIs>${ring(h)}</innerBoundaryIs>`).join('')
+  return `<Polygon><tessellate>1</tessellate><outerBoundaryIs>${ring(outlineOf(shape))}</outerBoundaryIs>${inner}</Polygon>`
 }
 
 function styleFor(shape) {
@@ -214,15 +215,9 @@ export function parseShapeKML(text, fallbackName = 'Imported') {
     }
 
     for (const polygon of all(placemark, 'Polygon')) {
-      const ring = first(polygon, 'LinearRing')
-      const c = ring && first(ring, 'coordinates')
-      if (!c) continue
-      let coords = parseCoords(c.textContent)
-      // Rings repeat their first point to close; the editor does not.
-      if (coords.length > 1) {
-        const [a, b] = [coords[0], coords[coords.length - 1]]
-        if (a[0] === b[0] && a[1] === b[1]) coords = coords.slice(0, -1)
-      }
+      const outer = first(polygon, 'outerBoundaryIs') || polygon
+      const coords = readRing(first(outer, 'LinearRing'))
+      if (!coords) continue
       if (declared === 'circle' && Number.isFinite(radius) && radius > 0) {
         const centre = centroid(coords)
         push('circle', [centre], { radius })
@@ -231,7 +226,10 @@ export function parseShapeKML(text, fallbackName = 'Imported') {
         const lons = coords.map((p) => p[1])
         push('rectangle', [[Math.max(...lats), Math.min(...lons)], [Math.min(...lats), Math.max(...lons)]])
       } else {
-        push('polygon', coords)
+        const holes = all(polygon, 'innerBoundaryIs')
+          .map((b) => readRing(first(b, 'LinearRing')))
+          .filter((h) => h && h.length >= 3)
+        push('polygon', coords, holes.length ? { holes } : {})
       }
     }
   }
@@ -243,6 +241,18 @@ export function parseShapeKML(text, fallbackName = 'Imported') {
   const documentEl = first(doc, 'Document')
   const docName = (documentEl && childText(documentEl, 'name')) || fallbackName
   return { name: docName, shapes }
+}
+
+// Rings repeat their first point to close; the editor does not.
+function readRing(ring) {
+  const c = ring && first(ring, 'coordinates')
+  if (!c) return null
+  const coords = parseCoords(c.textContent)
+  if (coords.length > 1) {
+    const [a, b] = [coords[0], coords[coords.length - 1]]
+    if (a[0] === b[0] && a[1] === b[1]) return coords.slice(0, -1)
+  }
+  return coords
 }
 
 function centroid(coords) {

@@ -767,6 +767,7 @@ svg { flex-shrink: 0; }
   color: var(--text-3);
 }
 .type-pill--kml { background: #fef3c7; color: #b45309; }
+.type-pill--csv { background: #dcfce7; color: #15803d; }
 
 /* ── Tower row editing ────────────────────────────────── */
 .tower-item-main {
@@ -871,6 +872,7 @@ svg { flex-shrink: 0; }
   text-decoration: underline;
 }
 .renumber-all-btn:disabled { color: var(--text-3); cursor: default; text-decoration: none; }
+.join-line-btn { width: 100%; margin-top: 8px; text-align: center; }
 .export-btn-count {
   margin-left: 6px;
   font-size: 11px;

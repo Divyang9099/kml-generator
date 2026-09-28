@@ -315,7 +315,7 @@ export default function MapView({
 
       <CoordinateSearch point={coordPoint} onGo={setCoordPoint} onClear={() => setCoordPoint(null)} />
 
-      {dragOver && <div className="map-drop-overlay">Drop the .kml or .kmz to load it</div>}
+      {dragOver && <div className="map-drop-overlay">Drop the .kml, .kmz or .csv to load it</div>}
 
       <MapContainer
         center={[22.5, 79.0]}

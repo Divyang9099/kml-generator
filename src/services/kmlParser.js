@@ -1,4 +1,5 @@
 import { nextUid } from './towers.js'
+import { parseCSVTowers } from './csvImport.js'
 
 // Refuse absurd files rather than locking up the browser mid-render.
 const MAX_TOWERS = 50000
@@ -130,7 +131,9 @@ export function parseKML(text, fallbackName = 'Imported KML') {
   }
 }
 
-export const baseName = (filename) => filename.replace(/\.(kml|kmz)$/i, '')
+export const baseName = (filename) => filename.replace(/\.(kml|kmz|csv|txt)$/i, '')
+
+export const isCsvFile = (file) => /\.(csv|txt|tsv)$/i.test(file.name)
 
 // A .kmz is a zip around a .kml — what Google Earth saves by default. JSZip is
 // loaded on demand so the bundle only pays for it when someone opens one.
@@ -146,6 +149,8 @@ export async function readKmlText(file) {
   return entry.async('string')
 }
 
+// A tower line from either a KML/KMZ or a CSV of points.
 export async function readTowerFile(file) {
+  if (isCsvFile(file)) return parseCSVTowers(await file.text(), baseName(file.name))
   return parseKML(await readKmlText(file), baseName(file.name))
 }

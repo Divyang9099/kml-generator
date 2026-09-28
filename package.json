@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@turf/buffer": "^7.4.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
