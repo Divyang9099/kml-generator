@@ -59,6 +59,19 @@ svg { flex-shrink: 0; }
   background: var(--white);
 }
 
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar-clear-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .logo {
   display: flex;
   align-items: center;

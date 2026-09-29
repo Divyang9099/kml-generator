@@ -531,16 +531,28 @@ export default function App() {
       {/* ── SIDEBAR ── */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="logo">
-            <svg viewBox="0 0 32 32" fill="none" width="28" height="28">
-              <path d="M16 2L4 17h10l-2 13L28 12H18L20 2z" fill="#f59e0b" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/>
-            </svg>
-            <div>
-              <h1 className="app-title">सर्जनम्</h1>
-              <p className="app-subtitle">
-                {mode === 'draw' ? 'Create custom KML' : 'Power Line Tower Export'}
-              </p>
+          <div className="sidebar-header-top">
+            <div className="logo">
+              <svg viewBox="0 0 32 32" fill="none" width="28" height="28">
+                <path d="M16 2L4 17h10l-2 13L28 12H18L20 2z" fill="#f59e0b" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/>
+              </svg>
+              <div>
+                <h1 className="app-title">सर्जनम्</h1>
+                <p className="app-subtitle">
+                  {mode === 'draw' ? 'Create custom KML' : 'Power Line Tower Export'}
+                </p>
+              </div>
             </div>
+
+            {(mode === 'line' ? Boolean(selectedLine || towers.length > 0) : shapes.length > 0) && (
+              <button
+                className="btn-clear sidebar-clear-btn"
+                onClick={mode === 'line' ? handleClearLine : handleClearShapes}
+                title={mode === 'line' ? 'Remove this line and start over' : 'Clear all drawn features'}
+              >
+                🗑 Clear
+              </button>
+            )}
           </div>
 
           <div className="mode-tabs">
@@ -696,7 +708,6 @@ export default function App() {
                           onUndo={handleUndo}
                           canRedo={canRedo}
                           onRedo={handleRedo}
-                          onClear={handleClearLine}
                           onSelectAll={handleSelectAll}
                         />
                       </section>

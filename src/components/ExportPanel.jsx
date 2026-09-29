@@ -20,7 +20,6 @@ export default function ExportPanel({
   onUndo,
   canRedo = false,
   onRedo,
-  onClear,
   onSelectAll,
 }) {
   const hasRange = Boolean(fromTower && toTower)
@@ -142,9 +141,6 @@ export default function ExportPanel({
         </button>
         <button className="edit-toggle" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
           ↷ Redo
-        </button>
-        <button className="edit-toggle btn-clear" onClick={onClear} title="Remove this line and start over">
-          🗑 Clear
         </button>
       </div>
 
