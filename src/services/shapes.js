@@ -30,7 +30,35 @@ export const TYPE_LABEL = {
   circle: 'Circle',
 }
 
+// Clean coordinates: remove consecutive duplicates and open closed rings
+export function cleanCoords(coords, isRing = false) {
+  if (!Array.isArray(coords) || coords.length === 0) return []
+  const cleaned = []
+  for (let i = 0; i < coords.length; i++) {
+    const cur = coords[i]
+    if (!cur || !Number.isFinite(cur[0]) || !Number.isFinite(cur[1])) continue
+    if (cleaned.length > 0) {
+      const prev = cleaned[cleaned.length - 1]
+      if (Math.abs(cur[0] - prev[0]) < 1e-9 && Math.abs(cur[1] - prev[1]) < 1e-9) {
+        continue
+      }
+    }
+    cleaned.push(cur)
+  }
+  if (isRing && cleaned.length > 2) {
+    const first = cleaned[0]
+    const last = cleaned[cleaned.length - 1]
+    if (Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9) {
+      cleaned.pop()
+    }
+  }
+  return cleaned
+}
+
 export function createShape(type, coords, extra = {}) {
+  const sanitized = type === 'polygon' || type === 'line'
+    ? cleanCoords(coords, type === 'polygon')
+    : coords
   return {
     id: nextShapeId(),
     type,
@@ -41,7 +69,7 @@ export function createShape(type, coords, extra = {}) {
     opacity: 0.25,
     icon: 'pin',
     iconScale: 1,
-    coords,
+    coords: sanitized,
     ...extra,
   }
 }
@@ -68,7 +96,7 @@ export function circleRing(shape, segments = 72) {
 
 // The closed outline of any area shape, or null for shapes that have none.
 export function outlineOf(shape) {
-  if (shape.type === 'polygon') return shape.coords
+  if (shape.type === 'polygon') return cleanCoords(shape.coords, true)
   if (shape.type === 'rectangle') return rectangleRing(shape.coords)
   if (shape.type === 'circle') return circleRing(shape)
   return null
@@ -167,6 +195,10 @@ export function radiusBetween(a, b) {
 
 export { formatArea }
 
+function samePoint(p, q) {
+  return Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9
+}
+
 // Do segments p1→p2 and p3→p4 cross? Standard orientation test; touching at a
 // shared endpoint does not count.
 function orient(a, b, c) {
@@ -174,12 +206,35 @@ function orient(a, b, c) {
   return v > 1e-12 ? 1 : v < -1e-12 ? -1 : 0
 }
 
+function pointOnSegmentInterior(p, a, b) {
+  if (samePoint(p, a) || samePoint(p, b)) return false
+  const minLat = Math.min(a[0], b[0]) - 1e-11
+  const maxLat = Math.max(a[0], b[0]) + 1e-11
+  const minLon = Math.min(a[1], b[1]) - 1e-11
+  const maxLon = Math.max(a[1], b[1]) + 1e-11
+  return p[0] >= minLat && p[0] <= maxLat && p[1] >= minLon && p[1] <= maxLon
+}
+
 function segmentsCross(p1, p2, p3, p4) {
+  // Touching at a shared endpoint does not count as crossing.
+  if (samePoint(p1, p3) || samePoint(p1, p4) || samePoint(p2, p3) || samePoint(p2, p4)) {
+    return false
+  }
   const d1 = orient(p3, p4, p1)
   const d2 = orient(p3, p4, p2)
   const d3 = orient(p1, p2, p3)
   const d4 = orient(p1, p2, p4)
-  return d1 !== d2 && d3 !== d4
+
+  // Proper crossing: p1 and p2 on opposite sides of p3-p4, and p3 and p4 on opposite sides of p1-p2
+  if (d1 * d2 < 0 && d3 * d4 < 0) return true
+
+  // T-junction / vertex touching interior of another segment
+  if (d1 === 0 && pointOnSegmentInterior(p1, p3, p4)) return true
+  if (d2 === 0 && pointOnSegmentInterior(p2, p3, p4)) return true
+  if (d3 === 0 && pointOnSegmentInterior(p3, p1, p2)) return true
+  if (d4 === 0 && pointOnSegmentInterior(p4, p1, p2)) return true
+
+  return false
 }
 
 /**
@@ -190,7 +245,8 @@ function segmentsCross(p1, p2, p3, p4) {
  * O(n²), so it is skipped on very large rings, where a hand-drawn mistake is
  * not the realistic case anyway.
  */
-export function isSelfIntersecting(coords) {
+export function isSelfIntersecting(rawCoords) {
+  const coords = cleanCoords(rawCoords, true)
   const n = coords?.length ?? 0
   if (n < 4 || n > 300) return false
 
@@ -209,3 +265,4 @@ export function isSelfIntersecting(coords) {
 // True only for shapes whose area is actually meaningful.
 export const isBadRing = (shape) =>
   (shape.type === 'polygon') && isSelfIntersecting(shape.coords)
+

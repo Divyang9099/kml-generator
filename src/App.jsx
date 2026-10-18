@@ -15,7 +15,7 @@ import { readTowerFile, readKmlText, baseName, isCsvFile } from './services/kmlP
 import { generateShapeKML, generateShapeCSV, parseShapeKML } from './services/shapeKml.js'
 import { parseCSVShapes } from './services/csvImport.js'
 import { bufferShape } from './services/buffer.js'
-import { createShape, isComplete, radiusBetween, primeShapeCounter } from './services/shapes.js'
+import { createShape, isComplete, radiusBetween, primeShapeCounter, cleanCoords } from './services/shapes.js'
 import { loadSession, saveSession, flushSession, clearSession, isEmptySession } from './services/storage.js'
 import { downloadAs, downloadBlob, toKmz, FILE_TYPES } from './services/saveFile.js'
 import { nextUid, insertionIndex, displayNumber, resolveRange, primeUidCounter } from './services/towers.js'
@@ -125,8 +125,9 @@ export default function App() {
   }, [commit])
 
   const finishDraft = useCallback(() => {
-    if (!isComplete(tool, draft)) return
-    addShape(createShape(tool, draft))
+    const cleaned = cleanCoords(draft, tool === 'polygon')
+    if (!isComplete(tool, cleaned)) return
+    addShape(createShape(tool, cleaned))
     setDraft([])
   }, [tool, draft, addShape])
 

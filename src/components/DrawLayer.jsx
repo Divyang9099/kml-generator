@@ -25,7 +25,14 @@ function DrawEvents({ tool, draft, onVertex, onFinish, onCursor }) {
   const map = useMapEvents({
     click(e) {
       if (!tool || tool === 'select') return
-      onVertex([e.latlng.lat, e.latlng.lng])
+      const clicked = [e.latlng.lat, e.latlng.lng]
+      if (tool === 'polygon' && draft.length >= 3) {
+        if (radiusBetween(clicked, draft[0]) < 25) {
+          onFinish()
+          return
+        }
+      }
+      onVertex(clicked)
     },
     mousemove(e) {
       if (!tool || tool === 'select' || !draft.length) return
@@ -238,14 +245,36 @@ export default function DrawLayer({
 
       {/* Vertices already committed to the shape being drawn */}
       {drawing &&
-        draft.map((c, i) => (
-          <CircleMarker
-            key={`d${i}`}
-            center={c}
-            radius={4}
-            pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#2563eb', fillOpacity: 1 }}
-          />
-        ))}
+        draft.map((c, i) => {
+          const isStartPoint = i === 0 && tool === 'polygon' && draft.length >= 3
+          return (
+            <CircleMarker
+              key={`d${i}`}
+              center={c}
+              radius={isStartPoint ? 6 : 4}
+              pathOptions={{
+                color: isStartPoint ? '#15803d' : '#ffffff',
+                weight: 2,
+                fillColor: isStartPoint ? '#22c55e' : '#2563eb',
+                fillOpacity: 1,
+              }}
+              eventHandlers={{
+                click: (e) => {
+                  if (isStartPoint) {
+                    L.DomEvent.stopPropagation(e)
+                    onFinish()
+                  }
+                },
+              }}
+            >
+              {isStartPoint && (
+                <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+                  Click to close polygon
+                </Tooltip>
+              )}
+            </CircleMarker>
+          )
+        })}
     </>
   )
 }
