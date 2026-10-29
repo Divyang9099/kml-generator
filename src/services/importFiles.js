@@ -2,7 +2,8 @@
 // own, so a bad one costs only itself: the rest still load, and the bad one is
 // named in the error instead of sinking the whole batch.
 
-import { readTowerFile, readKmlText, baseName, isCsvFile, MAX_TOWERS } from './kmlParser.js'
+import { readTowerFile, readKmlText, baseName, isCsvFile } from './kmlParser.js'
+import { makeLine, lineKey } from './lines.js'
 import { parseShapeKML } from './shapeKml.js'
 import { parseCSVShapes } from './csvImport.js'
 
@@ -15,14 +16,8 @@ export function sortByName(files) {
     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
-// Two files cut from one line usually share the tower they were cut at. Our
-// KML keeps full precision and our CSV rounds to 7 decimals, so "the same
-// place" is anything within about 10 cm — no two real towers stand that close.
-const SAME_PLACE = 1e-6
-const samePlace = (a, b) =>
-  Math.abs(a.lat - b.lat) < SAME_PLACE && Math.abs(a.lon - b.lon) < SAME_PLACE
-
-// Segments of one line all carry that line's name; anything else is a mix.
+// Features from several files share one canvas and so one name: the file's own
+// when they all agree, otherwise the first plus a count.
 function combinedName(names) {
   const unique = [...new Set(names.filter(Boolean))]
   return unique.length > 1 ? `${unique[0]} + ${unique.length - 1} more` : unique[0]
@@ -32,60 +27,39 @@ function combinedName(names) {
 const tagNotes = (notes = [], file, many) => notes.map((n) => (many ? `${file.name}: ${n}` : n))
 
 /**
- * Tower files joined end to end, in name order, into the one line the Power
- * Line workspace holds. Returns { name, towers, kind, loaded, notes, failed }:
- * `loaded` names the files that made it in, `failed` is [{ name, message }].
+ * Tower files, one line per file, in name order. Returns
+ * { lines, notes, failed }: each line is { key, type, id, tags, towers } —
+ * `type` is 'kml' or 'csv', `id` the file name, `tags.name` the name inside the
+ * file — and `failed` is [{ name, message }].
  */
 export async function readTowerFiles(fileList) {
   const files = sortByName(fileList)
   const many = files.length > 1
-  const towers = []
-  const names = []
-  const loaded = []
+  const lines = []
   const counts = []
   const notes = []
   const failed = []
-  let anyKml = false
+  const seen = new Set()
 
-  // One at a time rather than in parallel: a file whose towers have no numbers
-  // of their own is numbered on from where the file before it ended.
   for (const file of files) {
     try {
-      const result = await readTowerFile(file, towers.length + 1)
-      let parsed = result.towers
-      if (towers.length && parsed.length && samePlace(towers[towers.length - 1], parsed[0])) {
-        parsed = parsed.slice(1)
-      }
-      if (towers.length + parsed.length > MAX_TOWERS) {
-        throw new Error(`it would take the line past ${MAX_TOWERS.toLocaleString()} points.`)
-      }
-      // A loop, not push(...parsed): spreading tens of thousands of arguments
-      // can overflow the call stack.
-      for (const t of parsed) towers.push(t)
-      names.push(result.name)
-      loaded.push(file.name)
-      counts.push(`${file.name} (${parsed.length})`)
+      const result = await readTowerFile(file)
+      const type = isCsvFile(file) ? 'csv' : 'kml'
+      // Two files in different folders can share a name; keys must not.
+      let id = file.name
+      for (let n = 2; seen.has(lineKey(type, id)); n++) id = `${file.name} (${n})`
+      const line = makeLine(type, id, { name: result.name }, result.towers)
+      seen.add(line.key)
+      lines.push(line)
+      counts.push(`${file.name} (${result.towers.length})`)
       notes.push(...tagNotes(result.notes, file, many))
-      if (!isCsvFile(file)) anyKml = true
     } catch (e) {
       failed.push({ name: file.name, message: e.message })
     }
   }
 
-  // Say which order they went in: a line that zigzags between segments is
-  // explained at once by a file that sorted somewhere unexpected.
-  if (loaded.length > 1) {
-    notes.unshift(`Joined ${loaded.length} files end to end, in name order: ${counts.join(', ')}.`)
-  }
-
-  return {
-    name: combinedName(names),
-    towers,
-    kind: anyKml ? 'kml' : 'csv',
-    loaded,
-    notes,
-    failed,
-  }
+  if (lines.length > 1) notes.unshift(`Loaded ${lines.length} files as separate lines: ${counts.join(', ')}.`)
+  return { lines, notes, failed }
 }
 
 /**

@@ -1442,3 +1442,58 @@ svg { flex-shrink: 0; }
   cursor: pointer;
 }
 .ext-opt--on { background: var(--primary); color: var(--white); }
+
+/* ── Line tree (one folder per imported file) ─────────── */
+.line-tree { display: flex; flex-direction: column; gap: 6px; }
+.line-tree-head { display: flex; align-items: center; justify-content: space-between; }
+.line-tree-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 11px; font-weight: 600; color: var(--primary);
+}
+.line-tree-link:hover { text-decoration: underline; }
+
+.folder {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  overflow: hidden;
+}
+.folder--active { border-color: #fdba74; }
+.folder--hidden .folder-main { opacity: 0.5; }
+
+.folder-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 2px; }
+.folder--active > .folder-row { background: #fff7ed; }
+
+.folder-toggle {
+  width: 22px; height: 28px; flex-shrink: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-3); font-size: 13px;
+}
+.folder-toggle:hover { color: var(--text); }
+
+.folder-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 2px 0; cursor: pointer; text-align: left;
+}
+.folder-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.folder-text { display: flex; flex-direction: column; min-width: 0; }
+.folder-name {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.folder-sub { font-size: 11px; color: var(--text-3); }
+
+.folder-btn {
+  width: 26px; height: 26px; flex-shrink: 0;
+  background: none; border: none; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--text-3);
+}
+.folder-btn:hover { background: var(--bg); color: var(--text); }
+.folder-btn--del:hover { background: #fee2e2; color: #dc2626; }
+
+.folder-body {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 10px 10px 12px;
+  border-top: 1px solid var(--border);
+}

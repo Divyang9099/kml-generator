@@ -2,7 +2,7 @@ import { nextUid } from './towers.js'
 import { parseCSVTowers } from './csvImport.js'
 
 // Refuse absurd files rather than locking up the browser mid-render.
-export const MAX_TOWERS = 50000
+const MAX_TOWERS = 50000
 
 // KML puts everything in a default namespace, and files in the wild also use a
 // prefix (kml:Placemark). Matching on local name covers both.
@@ -46,15 +46,13 @@ function extendedValue(placemark, key) {
   return undefined
 }
 
-// "Tower 45" → 45. Falls back to the tower's position in the file, counted
-// from firstNumber — which is past the end of the previous file when several
-// are joined, so a second unnamed path carries on rather than restarting at 1.
-function numberFromName(name, idx, firstNumber) {
+// "Tower 45" → 45. Falls back to the tower's position in the file.
+function numberFromName(name, idx) {
   const match = String(name || '').match(/\d+/)
-  return match ? Number(match[0]) : firstNumber + idx
+  return match ? Number(match[0]) : idx + 1
 }
 
-export function parseKML(text, fallbackName = 'Imported KML', firstNumber = 1) {
+export function parseKML(text, fallbackName = 'Imported KML') {
   if (!text || !text.trim()) throw new Error('That file is empty.')
 
   const doc = new DOMParser().parseFromString(text, 'application/xml')
@@ -124,7 +122,7 @@ export function parseKML(text, fallbackName = 'Imported KML', firstNumber = 1) {
     name,
     towers: deduped.map((p, i) => ({
       uid: nextUid(),
-      towerNumber: numberFromName(p.name, i, firstNumber),
+      towerNumber: numberFromName(p.name, i),
       name: p.label || '',
       ...(p.osmId ? { osmId: p.osmId } : {}),
       lat: p.lat,
@@ -152,7 +150,7 @@ export async function readKmlText(file) {
 }
 
 // A tower line from either a KML/KMZ or a CSV of points.
-export async function readTowerFile(file, firstNumber = 1) {
-  if (isCsvFile(file)) return parseCSVTowers(await file.text(), baseName(file.name), firstNumber)
-  return parseKML(await readKmlText(file), baseName(file.name), firstNumber)
+export async function readTowerFile(file) {
+  if (isCsvFile(file)) return parseCSVTowers(await file.text(), baseName(file.name))
+  return parseKML(await readKmlText(file), baseName(file.name))
 }

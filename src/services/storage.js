@@ -2,6 +2,8 @@
 // data and full quotas all throw, and none of that may be allowed to break the
 // app — a lost restore is an inconvenience, a crash is not.
 
+import { upgradeDoc } from './lines.js'
+
 const KEY = 'sarjanam.session.v1'
 const SAVE_DELAY = 400
 // Above this the history is dropped rather than the document — losing undo
@@ -18,10 +20,8 @@ export function loadSession() {
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return null
     return {
-      towers: Array.isArray(data.towers) ? data.towers : [],
-      shapes: Array.isArray(data.shapes) ? data.shapes : [],
-      selectedLine: data.selectedLine ?? null,
-      past: Array.isArray(data.past) ? data.past : [],
+      ...upgradeDoc(data),
+      past: Array.isArray(data.past) ? data.past.map(upgradeDoc) : [],
       mode: data.mode === 'draw' ? 'draw' : 'line',
       savedAt: data.savedAt ?? null,
     }
@@ -66,4 +66,4 @@ export function clearSession() {
 }
 
 export const isEmptySession = (session) =>
-  !session || ((session.towers?.length ?? 0) === 0 && (session.shapes?.length ?? 0) === 0)
+  !session || ((session.lines?.length ?? 0) === 0 && (session.shapes?.length ?? 0) === 0)

@@ -4,6 +4,7 @@ import MapView from './components/MapView.jsx'
 import TowerList from './components/TowerList.jsx'
 import ExportPanel from './components/ExportPanel.jsx'
 import ImportButton from './components/ImportButton.jsx'
+import LineTree from './components/LineTree.jsx'
 import TowerEditModal from './components/TowerEditModal.jsx'
 import DrawPanel from './components/DrawPanel.jsx'
 import ShapeEditModal from './components/ShapeEditModal.jsx'
@@ -17,6 +18,7 @@ import { bufferShape } from './services/buffer.js'
 import { createShape, isComplete, radiusBetween, primeShapeCounter, cleanCoords } from './services/shapes.js'
 import { loadSession, saveSession, flushSession, clearSession, isEmptySession } from './services/storage.js'
 import { downloadAs, downloadBlob, toKmz, FILE_TYPES } from './services/saveFile.js'
+import { makeLine, colorOf } from './services/lines.js'
 import { nextUid, insertionIndex, displayNumber, resolveRange, primeUidCounter } from './services/towers.js'
 import {
   generateKML,
@@ -26,28 +28,34 @@ import {
   selectTowers,
 } from './services/kmlGenerator.js'
 
+const NO_TOWERS = []
+
 export default function App() {
   // Whatever the last session left behind, read once before first paint. The id
   // counters must be advanced past it, or the next tower or shape created would
   // reuse an id that is still on screen.
   const restored = useMemo(() => {
     const session = loadSession()
-    primeUidCounter(session?.towers)
+    primeUidCounter(session?.lines?.flatMap((l) => l.towers))
     primeShapeCounter(session?.shapes)
     return session
   }, [])
 
-  // selectedLine belongs to the document, not to UI state: it is what the
-  // loaded towers *are*, so undoing a Clear has to bring it back with them.
+  // The lines belong to the document, not to UI state: they are what the loaded
+  // towers *are*, so undoing a Clear has to bring them back along with them.
   const { doc, past, commit, setDoc, undo, redo, canUndo, canRedo, reset } = useDocumentHistory(
     {
-      towers: restored?.towers ?? [],
+      lines: restored?.lines ?? [],
+      activeId: restored?.activeId ?? null,
       shapes: restored?.shapes ?? [],
-      selectedLine: restored?.selectedLine ?? null,
     },
     restored?.past ?? [], // so Ctrl+Z still reaches back past a reload
   )
-  const { towers, shapes, selectedLine } = doc
+  const { lines, activeId, shapes } = doc
+  // Everything below that edits, ranges over or exports towers works on the
+  // active line. It carries type/id/tags, so it doubles as the old selectedLine.
+  const selectedLine = useMemo(() => lines.find((l) => l.key === activeId) ?? null, [lines, activeId])
+  const towers = selectedLine?.towers ?? NO_TOWERS
 
   const [mode, setMode]                   = useState(restored?.mode ?? 'line')
   const [searchResults, setSearchResults] = useState([])
@@ -64,6 +72,8 @@ export default function App() {
   const [addMode, setAddMode]             = useState(false)
   const [editingUid, setEditingUid]       = useState(null)  // tower open in the edit dialog
   const [restoredNote, setRestoredNote]   = useState(() => !isEmptySession(restored))
+  const [collapsed, setCollapsed]         = useState(() => new Set()) // folders shut by hand
+  const [hidden, setHidden]               = useState(() => new Set()) // lines hidden from the map
 
   // Draw workspace
   const [tool, setTool]                   = useState('select')
@@ -80,23 +90,22 @@ export default function App() {
   /* ── Session persistence ───────────────────────────────────────────── */
 
   useEffect(() => {
-    saveSession({ towers, shapes, selectedLine, mode, past })
-  }, [towers, shapes, selectedLine, mode, past])
+    saveSession({ lines, activeId, shapes, mode, past })
+  }, [lines, activeId, shapes, mode, past])
 
   // Closing the tab mid-edit should cost a confirmation, not the work.
   useEffect(() => {
-    if (!towers.length && !shapes.length) return undefined
+    if (!lines.length && !shapes.length) return undefined
     const onBeforeUnload = (e) => {
       // A debounced save would never fire once the tab is gone.
-      flushSession({ towers, shapes, selectedLine, mode, past })
+      flushSession({ lines, activeId, shapes, mode, past })
       e.preventDefault()
       e.returnValue = ''
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [towers, shapes, selectedLine, mode, past])
+  }, [lines, activeId, shapes, mode, past])
 
-  const totalLength = useMemo(() => calcLength(towers), [towers])
   const rangeLength = useMemo(() => {
     if (fromIdx === null || toIdx === null) return 0
     const lo = Math.min(fromIdx, toIdx)
@@ -186,9 +195,9 @@ export default function App() {
     }
   }, [])
 
-  // Everything that must be cleared when a different line replaces the current one.
-  const resetForNewLine = useCallback((nextTowers = [], line = null) => {
-    reset({ towers: nextTowers, shapes, selectedLine: line })
+  // Everything that must be cleared when a different line becomes the one
+  // being worked on.
+  const resetForNewLine = useCallback(() => {
     clearSelection()
     setEditMode(false)
     setAddMode(false)
@@ -196,16 +205,19 @@ export default function App() {
     setStartNumber(1)
     setError(null)
     setRestoredNote(false)
-  }, [reset, shapes, clearSelection])
+  }, [clearSelection])
 
   const handleSelectLine = useCallback(async (result) => {
     setSearchResults([])
-    resetForNewLine([], result)
+    resetForNewLine()
+    // A search result replaces whatever lines were loaded.
+    const line = makeLine(result.type, result.id, result.tags)
+    reset({ lines: [line], activeId: line.key, shapes })
     setLoading(true)
     try {
       const data = await fetchLineGeometry(result.type, result.id)
       if (!data.length) setError('No tower geometry found for this line.')
-      else reset({ towers: data, shapes, selectedLine: result })
+      else reset({ lines: [{ ...line, towers: data }], activeId: line.key, shapes })
     } catch (e) {
       setError('Failed to load towers: ' + e.message)
     } finally {
@@ -214,8 +226,9 @@ export default function App() {
   }, [resetForNewLine, reset, shapes])
 
   // One file or several. Each is read as KML/KMZ or, for .csv/.txt, through
-  // the CSV analyser — the extension is all that decides which — and several
-  // are joined end to end into the one line this workspace holds.
+  // the CSV analyser — the extension is all that decides which — and each
+  // becomes its own line, added alongside the ones already loaded. Importing a
+  // file that is already loaded replaces that line.
   const handleImportFiles = useCallback(async (files) => {
     if (!files?.length) return
     setSearchResults([])
@@ -223,30 +236,59 @@ export default function App() {
     setImporting(true)
     setNotice(null)
     try {
-      const { name, towers: parsed, kind, loaded, notes, failed } = await readTowerFiles(files)
-      if (!parsed.length) {
-        reset({ towers: [], shapes, selectedLine: null })
-        setError(failureMessage('import', failed, files.length))
-        return
-      }
-      // A synthetic "line" so every existing panel renders an imported file
-      // exactly as it renders one loaded from OpenStreetMap.
-      reset({ towers: parsed, shapes, selectedLine: { type: kind, id: loaded.join(', '), tags: { name } } })
+      const { lines: incoming, notes, failed } = await readTowerFiles(files)
       if (failed.length) setError(failureMessage('import', failed, files.length))
+      if (!incoming.length) return
+      const keys = new Set(incoming.map((l) => l.key))
+      commit(d => ({
+        ...d,
+        lines: [...d.lines.filter((l) => !keys.has(l.key)), ...incoming],
+        activeId: incoming[0].key,
+      }))
+      setCollapsed(c => new Set([...c].filter((k) => !keys.has(k))))
+      setHidden(h => new Set([...h].filter((k) => !keys.has(k))))
       if (notes.length) setNotice(notes.join(' '))
     } finally {
       setImporting(false)
     }
-  }, [resetForNewLine, reset, shapes])
+  }, [resetForNewLine, commit])
+
+  // Clicking a folder opens it, or shuts it again if it is already the open one.
+  const handleToggleLine = useCallback((key) => {
+    if (key !== activeId) {
+      resetForNewLine()
+      setDoc(d => ({ ...d, activeId: key }))
+      setCollapsed(c => { const n = new Set(c); n.delete(key); return n })
+    } else {
+      setCollapsed(c => { const n = new Set(c); if (n.has(key)) n.delete(key); else n.add(key); return n })
+    }
+  }, [activeId, resetForNewLine, setDoc])
+
+  const handleToggleVisible = useCallback((key) => {
+    setHidden(h => { const n = new Set(h); if (n.has(key)) n.delete(key); else n.add(key); return n })
+  }, [])
+
+  const handleRemoveLine = useCallback((key) => {
+    commit(d => {
+      const rest = d.lines.filter((l) => l.key !== key)
+      return { ...d, lines: rest, activeId: d.activeId === key ? rest[0]?.key ?? null : d.activeId }
+    })
+    if (key === activeId) resetForNewLine()
+  }, [activeId, commit, resetForNewLine])
 
   // Structural edits are undoable. Number edits are not: they fire per
   // keystroke, and would bury every real change under a pile of single letters.
   const commitTowers = useCallback((next) => {
-    commit(d => ({ ...d, towers: next }))
+    commit(d => ({ ...d, lines: d.lines.map((l) => (l.key === d.activeId ? { ...l, towers: next } : l)) }))
   }, [commit])
 
   const handleNumberChange = useCallback((uid, value) => {
-    setDoc(d => ({ ...d, towers: d.towers.map(t => (t.uid === uid ? { ...t, customNumber: value } : t)) }))
+    setDoc(d => ({
+      ...d,
+      lines: d.lines.map((l) => (l.key === d.activeId
+        ? { ...l, towers: l.towers.map(t => (t.uid === uid ? { ...t, customNumber: value } : t)) }
+        : l)),
+    }))
   }, [setDoc])
 
   const handleDeleteTower = useCallback((uid) => {
@@ -491,19 +533,22 @@ export default function App() {
     setDraft([])
   }, [shapes.length, commit])
 
-  // The power-line half of Clear: drops the loaded line, leaves drawn shapes.
+  // The power-line half of Clear: drops every loaded line, leaves drawn shapes.
   const handleClearLine = useCallback(() => {
-    if (!window.confirm(`Remove this line and its ${towers.length} towers? Ctrl+Z brings it back.`)) return
-    commit(d => ({ ...d, towers: [], selectedLine: null }))
+    const msg = lines.length === 1
+      ? `Remove this line and its ${towers.length} towers? Ctrl+Z brings it back.`
+      : `Remove all ${lines.length} lines? Ctrl+Z brings them back.`
+    if (!window.confirm(msg)) return
+    commit(d => ({ ...d, lines: [], activeId: null }))
     setEditingUid(null)
     setEditMode(false)
     setAddMode(false)
     clearSelection()
-  }, [towers.length, commit, clearSelection])
+  }, [lines.length, towers.length, commit, clearSelection])
 
   const handleClearEverything = useCallback(() => {
     if (!window.confirm('Clear the whole session — towers and drawn features?')) return
-    reset({ towers: [], shapes: [], selectedLine: null })
+    reset({ lines: [], activeId: null, shapes: [] })
     clearSession()
     setDraft([])
     setSelectedShapeId(null)
@@ -526,7 +571,17 @@ export default function App() {
   const editingTower = editingIdx >= 0 ? towers[editingIdx] : null
   const editingShape = shapes.find(s => s.id === editingShapeId) || null
 
-  const lineName = selectedLine?.tags?.name || (selectedLine ? `ID: ${selectedLine.id}` : '')
+  // The map draws the open line with full editing, and every other visible line
+  // as a plain trace that opens on click.
+  const mapTowers = selectedLine && !hidden.has(selectedLine.key) ? towers : NO_TOWERS
+  const otherLines = useMemo(
+    () => lines
+      .filter((l) => l.key !== activeId && !hidden.has(l.key))
+      .map((l) => ({ key: l.key, name: l.tags?.name || `Line ${l.id}`, color: colorOf(lines, l.key), towers: l.towers })),
+    [lines, activeId, hidden],
+  )
+  const fitKey = useMemo(() => lines.map((l) => l.key).join('|'), [lines])
+
   const voltage  = selectedLine?.tags?.voltage
     ? `${Math.round(Number(selectedLine.tags.voltage) / 1000)} kV`
     : null
@@ -549,7 +604,7 @@ export default function App() {
               </div>
             </div>
 
-            {(mode === 'line' ? Boolean(selectedLine || towers.length > 0) : shapes.length > 0) && (
+            {(mode === 'line' ? lines.length > 0 : shapes.length > 0) && (
               <button
                 className="btn-clear sidebar-clear-btn"
                 onClick={mode === 'line' ? handleClearLine : handleClearShapes}
@@ -647,94 +702,84 @@ export default function App() {
                 </div>
               )}
 
-              {selectedLine && !loading && (
-                <>
-                  <section className="section">
-                    <div className="line-card">
-                      <div className="line-card-top">
-                        <span className={`type-pill type-pill--${selectedLine.type}`}>
-                          {selectedLine.type}
-                        </span>
-                        <span className="line-card-name">{lineName}</span>
-                      </div>
-                      <div className="line-card-meta">
-                        {voltage && (
-                          <span className="meta-chip meta-chip--voltage">⚡ {voltage}</span>
-                        )}
-                        {selectedLine.tags?.operator && (
-                          <span className="meta-chip">{selectedLine.tags.operator}</span>
-                        )}
-                        {selectedLine.tags?.circuits && (
-                          <span className="meta-chip">{selectedLine.tags.circuits} circuits</span>
-                        )}
-                      </div>
-                      {towers.length > 0 && (
-                        <div className="tower-count">
-                          <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-                            <circle cx="10" cy="10" r="7" stroke="#6366f1" strokeWidth="1.5"/>
-                            <path d="M10 7v4M10 13v.5" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/>
-                          </svg>
-                          {towers.length} towers loaded · {formatLength(totalLength)}
+              {lines.length > 0 && (
+                <LineTree
+                  lines={lines}
+                  activeId={activeId}
+                  collapsed={collapsed}
+                  hidden={hidden}
+                  onToggle={handleToggleLine}
+                  onToggleVisible={handleToggleVisible}
+                  onRemove={handleRemoveLine}
+                  onShowAll={() => setHidden(new Set())}
+                >
+                  {!loading && (
+                    <>
+                      {(voltage || selectedLine?.tags?.operator || selectedLine?.tags?.circuits) && (
+                        <div className="line-card-meta">
+                          {voltage && <span className="meta-chip meta-chip--voltage">⚡ {voltage}</span>}
+                          {selectedLine.tags?.operator && <span className="meta-chip">{selectedLine.tags.operator}</span>}
+                          {selectedLine.tags?.circuits && <span className="meta-chip">{selectedLine.tags.circuits} circuits</span>}
                         </div>
                       )}
-                    </div>
-                  </section>
 
-                  {towers.length > 0 && (
-                    <>
-                      <section className="section">
-                        <ExportPanel
-                          fromTower={fromIdx !== null ? towers[fromIdx] : null}
-                          toTower={toIdx !== null ? towers[toIdx] : null}
-                          selectionMode={selectionMode}
-                          onSetMode={setSelectionMode}
-                          onExport={handleExport}
-                          onExportCSV={handleExportCSV}
-                          onReset={clearSelection}
-                          startNumber={startNumber}
-                          onStartNumberChange={setStartNumber}
-                          towerCount={
-                            fromIdx !== null && toIdx !== null ? Math.abs(toIdx - fromIdx) + 1 : 0
-                          }
-                          rangeLength={rangeLength}
-                          formatLength={formatLength}
-                          totalTowers={towers.length}
-                          editMode={editMode}
-                          onToggleEdit={() => {
-                            setEditMode(v => !v)
-                            setAddMode(false)
-                          }}
-                          addMode={addMode}
-                          onToggleAdd={() => {
-                            setAddMode(v => !v)
-                            setSelectionMode(null)
-                          }}
-                          canUndo={canUndo}
-                          onUndo={handleUndo}
-                          canRedo={canRedo}
-                          onRedo={handleRedo}
-                          onSelectAll={handleSelectAll}
-                        />
-                      </section>
+                      {towers.length > 0 && (
+                        <>
+                          <section className="section">
+                            <ExportPanel
+                              fromTower={fromIdx !== null ? towers[fromIdx] : null}
+                              toTower={toIdx !== null ? towers[toIdx] : null}
+                              selectionMode={selectionMode}
+                              onSetMode={setSelectionMode}
+                              onExport={handleExport}
+                              onExportCSV={handleExportCSV}
+                              onReset={clearSelection}
+                              startNumber={startNumber}
+                              onStartNumberChange={setStartNumber}
+                              towerCount={
+                                fromIdx !== null && toIdx !== null ? Math.abs(toIdx - fromIdx) + 1 : 0
+                              }
+                              rangeLength={rangeLength}
+                              formatLength={formatLength}
+                              totalTowers={towers.length}
+                              editMode={editMode}
+                              onToggleEdit={() => {
+                                setEditMode(v => !v)
+                                setAddMode(false)
+                              }}
+                              addMode={addMode}
+                              onToggleAdd={() => {
+                                setAddMode(v => !v)
+                                setSelectionMode(null)
+                              }}
+                              canUndo={canUndo}
+                              onUndo={handleUndo}
+                              canRedo={canRedo}
+                              onRedo={handleRedo}
+                              onSelectAll={handleSelectAll}
+                            />
+                          </section>
 
-                      <TowerList
-                        towers={towers}
-                        fromIdx={fromIdx}
-                        toIdx={toIdx}
-                        onTowerClick={handleTowerClick}
-                        selectionMode={selectionMode}
-                        startNumber={startNumber}
-                        editMode={editMode}
-                        onNumberChange={handleNumberChange}
-                        onDeleteTower={handleDeleteTower}
-                        onEditTower={setEditingUid}
-                      />
+                          <TowerList
+                            towers={towers}
+                            fromIdx={fromIdx}
+                            toIdx={toIdx}
+                            onTowerClick={handleTowerClick}
+                            selectionMode={selectionMode}
+                            startNumber={startNumber}
+                            editMode={editMode}
+                            onNumberChange={handleNumberChange}
+                            onDeleteTower={handleDeleteTower}
+                            onEditTower={setEditingUid}
+                          />
+                        </>
+                      )}
                     </>
                   )}
-                </>
+                </LineTree>
               )}
 
-              {!selectedLine && !loading && (
+              {!lines.length && !loading && (
                 <div className="empty-state">
                   <svg viewBox="0 0 64 64" fill="none" width="56" height="56">
                     <rect x="8" y="28" width="48" height="4" rx="2" fill="#e2e8f0"/>
@@ -759,13 +804,15 @@ export default function App() {
       {/* ── MAP ── */}
       <main className="map-area">
         <MapView
-          towers={towers}
+          towers={mapTowers}
+          otherLines={otherLines}
+          onActivateLine={handleToggleLine}
           fromIdx={fromIdx}
           toIdx={toIdx}
           selectionMode={selectionMode}
           onTowerClick={handleTowerClick}
           startNumber={startNumber}
-          fitKey={selectedLine ? `${selectedLine.type}:${selectedLine.id}` : ''}
+          fitKey={fitKey}
           editMode={editMode}
           addMode={addMode}
           onTowerMove={handleTowerMove}

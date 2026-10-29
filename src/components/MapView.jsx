@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MapContainer,
   TileLayer,
@@ -33,6 +33,35 @@ function FitBounds({ towers, fitKey }) {
 
   return null
 }
+
+// A line that is loaded but not the one being worked on: a plain trace in its
+// own colour, which opens that line when clicked. Past a few hundred towers the
+// dots are dropped — thousands of circles cost far more than they tell you.
+const DOTS_BELOW = 400
+const OtherLine = memo(function OtherLine({ line, interactive, onActivate }) {
+  const positions = useMemo(() => line.towers.map((t) => [t.lat, t.lon]), [line.towers])
+  const handlers = interactive ? { click: () => onActivate(line.key) } : {}
+  return (
+    <>
+      <Polyline
+        positions={positions}
+        pathOptions={{ color: line.color, weight: 4, opacity: 0.9, interactive }}
+        eventHandlers={handlers}
+      >
+        {interactive && <Tooltip sticky opacity={1}>{line.name} — click to open</Tooltip>}
+      </Polyline>
+      {line.towers.length <= DOTS_BELOW && line.towers.map((t) => (
+        <CircleMarker
+          key={t.uid}
+          center={[t.lat, t.lon]}
+          radius={4}
+          pathOptions={{ color: line.color, fillColor: '#ffffff', fillOpacity: 1, weight: 2, interactive }}
+          eventHandlers={handlers}
+        />
+      ))}
+    </>
+  )
+})
 
 // Jump to a coordinate the user typed. Keyed on the point itself so entering
 // the same coordinates twice still re-centres the map.
@@ -242,6 +271,8 @@ export default function MapView({
   onTowerMove,
   onAddTower,
   onImportFiles,
+  otherLines = [],
+  onActivateLine,
   onEditTower,
   drawMode = false,
   shapes = [],
@@ -257,6 +288,14 @@ export default function MapView({
   const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
   const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
   const rangePositions = lo !== null ? positions.slice(lo, hi + 1) : []
+
+  // Every point on the map that a re-frame should take in.
+  const fitTowers = useMemo(
+    () => (otherLines.length ? [...towers, ...otherLines.flatMap((l) => l.towers)] : towers),
+    [towers, otherLines],
+  )
+  // Other lines only take clicks when nothing else is waiting for one.
+  const linesClickable = !drawMode && !addMode && !selectionMode
 
   const [dragOver, setDragOver] = useState(false)
   const [coordPoint, setCoordPoint] = useState(null)
@@ -393,9 +432,19 @@ export default function MapView({
 
         {/* The tower line stays visible in draw mode as a backdrop, but stops
             responding to clicks so it cannot steal them from the draw tools. */}
+        {fitTowers.length > 0 && <FitBounds towers={fitTowers} fitKey={fitKey} />}
+
+        {otherLines.map((line) => (
+          <OtherLine
+            key={`${line.key}|${linesClickable}`}
+            line={line}
+            interactive={linesClickable}
+            onActivate={onActivateLine}
+          />
+        ))}
+
         {towers.length > 0 && (
           <>
-            <FitBounds towers={towers} fitKey={fitKey} />
 
             {/* Full line — glowing halo underneath for visibility */}
             <Polyline
