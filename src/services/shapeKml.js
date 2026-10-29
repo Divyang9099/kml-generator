@@ -261,6 +261,20 @@ function centroid(coords) {
   return [lat, lon]
 }
 
+// WKT is "lon lat", and a ring is written closed.
+const wktPoint = ([lat, lon]) => `${+lon.toFixed(7)} ${+lat.toFixed(7)}`
+const wktRing = (ring) => `(${[...ring, ring[0]].map(wktPoint).join(', ')})`
+
+// The shape's real geometry, so the CSV is not just a list of centres: it opens
+// in QGIS / Excel-with-GIS, and this app reads it straight back as the same
+// points, lines and polygons (holes included). A circle goes out as its outline.
+function wktOf(shape) {
+  if (shape.type === 'point') return `POINT (${wktPoint(shape.coords[0])})`
+  if (shape.type === 'line') return `LINESTRING (${shape.coords.map(wktPoint).join(', ')})`
+  const holes = shape.type === 'polygon' ? shape.holes ?? [] : []
+  return `POLYGON (${[outlineOf(shape), ...holes].map(wktRing).join(', ')})`
+}
+
 // A spreadsheet of what was drawn — the Draw workspace's counterpart to the
 // tower CSV, so shapes can be handed to someone who does not open KML.
 export function generateShapeCSV(shapes) {
@@ -270,27 +284,31 @@ export function generateShapeCSV(shapes) {
   }
 
   const header = [
-    'Name', 'Type', 'Points', 'Length (m)', 'Area (acres)',
-    'Centre Latitude', 'Centre Longitude', 'Colour', 'Description',
+    'ID', 'Name', 'Type', 'Points', 'Length (m)', 'Area (acres)', 'Radius (m)',
+    'Centre Latitude', 'Centre Longitude', 'Colour', 'Description', 'WKT',
   ]
 
-  const rows = shapes.map((s) => {
-    const pts = s.type === 'circle' ? s.coords : outlineOf(s)
+  const rows = shapes.map((s, i) => {
+    // Points and lines have no outline; their own coordinates are the shape.
+    const pts = s.type === 'circle' ? s.coords : outlineOf(s) ?? s.coords
     const centre = pts.reduce(
       (acc, [lat, lon]) => [acc[0] + lat / pts.length, acc[1] + lon / pts.length],
       [0, 0]
     )
     const area = s.type === 'line' || s.type === 'point' || isBadRing(s) ? '' : areaOf(s) / SQM_PER_ACRE
     return [
+      s.id ?? `s${i + 1}`,
       s.name?.trim() || TYPE_LABEL[s.type],
       s.type,
       s.type === 'circle' ? '' : s.coords.length,
       s.type === 'point' ? '' : Math.round(lengthOf(s)),
       area === '' ? '' : area.toFixed(3),
+      s.type === 'circle' ? Math.round(s.radius) : '',
       centre[0].toFixed(7),
       centre[1].toFixed(7),
       s.color,
       s.description ?? '',
+      wktOf(s),
     ]
   })
 
