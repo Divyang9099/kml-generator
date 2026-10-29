@@ -447,15 +447,18 @@ svg { flex-shrink: 0; }
 
 /* ── Make in India badge ── */
 .sidebar-footer {
-  padding: 10px 16px 12px;
+  padding: 4px 16px;
   border-top: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
 }
 
+/* The PNG is a 600×600 square with the lion in a band across the middle, so a
+   short box with object-fit: cover crops the empty space above and below it. */
 .make-in-india-badge {
-  width: 140px;
-  height: auto;
+  width: 80px;
+  height: 34px;
+  object-fit: cover;
   display: block;
   mix-blend-mode: multiply;
   pointer-events: none;
