@@ -4,10 +4,11 @@ export default function ImportButton({ onImport, importing }) {
   const inputRef = useRef(null)
 
   function handleChange(e) {
-    const file = e.target.files?.[0]
+    // Copied out before the reset below, which empties the input's file list.
+    const files = Array.from(e.target.files || [])
     // Reset first, so picking the same file twice in a row still fires onChange.
     e.target.value = ''
-    if (file) onImport(file)
+    if (files.length) onImport(files)
   }
 
   return (
@@ -16,6 +17,7 @@ export default function ImportButton({ onImport, importing }) {
         ref={inputRef}
         type="file"
         accept=".kml,.kmz,.csv,.txt"
+        multiple
         className="import-input"
         onChange={handleChange}
       />
@@ -32,9 +34,11 @@ export default function ImportButton({ onImport, importing }) {
             <path d="M3 16h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         )}
-        {importing ? 'Reading file…' : 'Import KML / CSV'}
+        {importing ? 'Reading…' : 'Import KML / CSV'}
       </button>
-      <span className="import-hint">or drop a .kml / .kmz / .csv on the map</span>
+      <span className="import-hint">
+        or drop .kml / .kmz / .csv files on the map — pick several to join them into one line
+      </span>
     </div>
   )
 }

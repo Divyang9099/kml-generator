@@ -401,9 +401,9 @@ export function parseCSVShapes(text, fallbackName = 'Imported CSV') {
  * Turns a CSV into a tower line. Reads this app's own tower export back
  * exactly (Tower Number, Label, OSM Node ID, Line Name); any other CSV of
  * points works too, one tower per row in file order. WKT lines contribute
- * their vertices.
+ * their vertices. Rows with no number of their own count up from firstNumber.
  */
-export function parseCSVTowers(text, fallbackName = 'Imported CSV') {
+export function parseCSVTowers(text, fallbackName = 'Imported CSV', firstNumber = 1) {
   const t = readTable(text)
   const towers = []
   let skipped = 0
@@ -423,7 +423,7 @@ export function parseCSVTowers(text, fallbackName = 'Imported CSV') {
         uid: nextUid(),
         towerNumber: numberCell && !/^\d+$/.test(numberCell)
           ? numberCell
-          : fromCell ? Number(fromCell[0]) : towers.length + 1,
+          : fromCell ? Number(fromCell[0]) : firstNumber + towers.length,
         name: coords.length > 1 ? '' : label,
         ...(osmId ? { osmId } : {}),
         lat,

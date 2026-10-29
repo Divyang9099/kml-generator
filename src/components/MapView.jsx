@@ -241,7 +241,7 @@ export default function MapView({
   addMode = false,
   onTowerMove,
   onAddTower,
-  onImportFile,
+  onImportFiles,
   onEditTower,
   drawMode = false,
   shapes = [],
@@ -270,8 +270,8 @@ export default function MapView({
   function handleDrop(e) {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) onImportFile(file)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length) onImportFiles(files)
   }
 
   const wrapClass = [
@@ -315,7 +315,7 @@ export default function MapView({
 
       <CoordinateSearch point={coordPoint} onGo={setCoordPoint} onClear={() => setCoordPoint(null)} />
 
-      {dragOver && <div className="map-drop-overlay">Drop the .kml, .kmz or .csv to load it</div>}
+      {dragOver && <div className="map-drop-overlay">Drop .kml, .kmz or .csv files to load them</div>}
 
       <MapContainer
         center={[22.5, 79.0]}

@@ -11,9 +11,8 @@ import BufferModal from './components/BufferModal.jsx'
 import SaveAsModal from './components/SaveAsModal.jsx'
 import useDocumentHistory from './hooks/useDocumentHistory.js'
 import { searchPowerLines, fetchLineGeometry } from './services/overpassApi.js'
-import { readTowerFile, readKmlText, baseName, isCsvFile } from './services/kmlParser.js'
-import { generateShapeKML, generateShapeCSV, parseShapeKML } from './services/shapeKml.js'
-import { parseCSVShapes } from './services/csvImport.js'
+import { readTowerFiles, readShapeFiles, failureMessage } from './services/importFiles.js'
+import { generateShapeKML, generateShapeCSV } from './services/shapeKml.js'
 import { bufferShape } from './services/buffer.js'
 import { createShape, isComplete, radiusBetween, primeShapeCounter, cleanCoords } from './services/shapes.js'
 import { loadSession, saveSession, flushSession, clearSession, isEmptySession } from './services/storage.js'
@@ -214,23 +213,27 @@ export default function App() {
     }
   }, [resetForNewLine, reset, shapes])
 
-  const handleImportFile = useCallback(async (file) => {
+  // One file or several. Each is read as KML/KMZ or, for .csv/.txt, through
+  // the CSV analyser — the extension is all that decides which — and several
+  // are joined end to end into the one line this workspace holds.
+  const handleImportFiles = useCallback(async (files) => {
+    if (!files?.length) return
     setSearchResults([])
     resetForNewLine()
     setImporting(true)
     setNotice(null)
     try {
-      // readTowerFile reads KML/KMZ as before, and a .csv/.txt straight through
-      // the CSV analyser — the file extension is all that decides which.
-      const { name, towers: parsed, notes } = await readTowerFile(file)
+      const { name, towers: parsed, kind, loaded, notes, failed } = await readTowerFiles(files)
+      if (!parsed.length) {
+        reset({ towers: [], shapes, selectedLine: null })
+        setError(failureMessage('import', failed, files.length))
+        return
+      }
       // A synthetic "line" so every existing panel renders an imported file
       // exactly as it renders one loaded from OpenStreetMap.
-      const badge = isCsvFile(file) ? 'csv' : 'kml'
-      reset({ towers: parsed, shapes, selectedLine: { type: badge, id: file.name, tags: { name } } })
-      if (notes?.length) setNotice(notes.join(' '))
-    } catch (e) {
-      reset({ towers: [], shapes, selectedLine: null })
-      setError('Could not import that file: ' + e.message)
+      reset({ towers: parsed, shapes, selectedLine: { type: kind, id: loaded.join(', '), tags: { name } } })
+      if (failed.length) setError(failureMessage('import', failed, files.length))
+      if (notes.length) setNotice(notes.join(' '))
     } finally {
       setImporting(false)
     }
@@ -421,16 +424,19 @@ export default function App() {
     setBufferingShapeId(null)
   }, [shapes, bufferingShapeId, commit])
 
-  const handleOpenShapeFile = useCallback(async (file) => {
+  const handleOpenShapeFiles = useCallback(async (files) => {
+    if (!files?.length) return
     setOpening(true)
     setError(null)
     setNotice(null)
     try {
-      const { name, shapes: parsed, notes } = isCsvFile(file)
-        ? parseCSVShapes(await file.text(), baseName(file.name))
-        : parseShapeKML(await readKmlText(file), baseName(file.name))
+      const { name, shapes: parsed, notes, failed } = await readShapeFiles(files)
+      if (failed.length) setError(failureMessage('open', failed, files.length))
+      // Nothing readable: leave the canvas alone rather than wipe it.
+      if (!parsed.length) return
       // Open replaces what is on the canvas, the way opening a file anywhere
-      // else does. It goes through commit, so Ctrl+Z brings back the old work.
+      // else does — with every file picked, all together. It goes through
+      // commit, so Ctrl+Z brings back the old work.
       commit(d => ({ ...d, shapes: parsed }))
       setDrawName(name)
       // Whatever tool was last armed (Point, Line…) leaves every shape locked
@@ -439,9 +445,7 @@ export default function App() {
       setTool('select')
       setSelectedShapeId(null)
       setRestoredNote(false)
-      if (notes?.length) setNotice(notes.join(' '))
-    } catch (e) {
-      setError('Could not open that file: ' + e.message)
+      if (notes.length) setNotice(notes.join(' '))
     } finally {
       setOpening(false)
     }
@@ -612,7 +616,7 @@ export default function App() {
               onEditShape={setEditingShapeId}
               onDeleteShape={handleDeleteShape}
               onBufferShape={setBufferingShapeId}
-              onOpenFile={handleOpenShapeFile}
+              onOpenFiles={handleOpenShapeFiles}
               onExport={handleExportShapes}
           onExportCSV={handleExportShapesCSV}
               onClear={handleClearShapes}
@@ -633,7 +637,7 @@ export default function App() {
                 <p className="search-hint">
                   Try a line name like <code>400 kV</code> or an ID like <code>relation:14543153</code>
                 </p>
-                <ImportButton onImport={handleImportFile} importing={importing} />
+                <ImportButton onImport={handleImportFiles} importing={importing} />
               </section>
 
               {loading && (
@@ -766,7 +770,7 @@ export default function App() {
           addMode={addMode}
           onTowerMove={handleTowerMove}
           onAddTower={handleAddTower}
-          onImportFile={mode === 'draw' ? handleOpenShapeFile : handleImportFile}
+          onImportFiles={mode === 'draw' ? handleOpenShapeFiles : handleImportFiles}
           onEditTower={setEditingUid}
           drawMode={mode === 'draw'}
           shapes={shapes}

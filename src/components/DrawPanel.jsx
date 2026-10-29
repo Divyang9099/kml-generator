@@ -36,7 +36,7 @@ export default function DrawPanel({
   onEditShape,
   onDeleteShape,
   onBufferShape,
-  onOpenFile,
+  onOpenFiles,
   onExport,
   onExportCSV,
   onClear,
@@ -46,9 +46,10 @@ export default function DrawPanel({
   const fileRef = useRef(null)
 
   function handleFile(e) {
-    const file = e.target.files?.[0]
+    // Copied out before the reset, which empties the input's file list.
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
-    if (file) onOpenFile(file)
+    if (files.length) onOpenFiles(files)
   }
 
   const drawing = tool && tool !== 'select' && draft.length > 0
@@ -98,13 +99,13 @@ export default function DrawPanel({
 
       <section className="section">
         <div className="import-row">
-          <input ref={fileRef} type="file" accept=".kml,.kmz,.csv,.txt" className="import-input" onChange={handleFile} />
+          <input ref={fileRef} type="file" accept=".kml,.kmz,.csv,.txt" multiple className="import-input" onChange={handleFile} />
           <button className="import-btn" onClick={() => fileRef.current?.click()} disabled={opening}>
             {opening ? <span className="spinner" /> : '📂'} {opening ? 'Opening…' : 'Open KML / CSV'}
           </button>
           <button className="import-btn btn-clear" onClick={onClear} disabled={!shapes.length}>🗑 Clear</button>
         </div>
-        <p className="search-hint">or drop a .kml / .kmz / .csv on the map</p>
+        <p className="search-hint">or drop .kml / .kmz / .csv files on the map — pick several to open them together</p>
         <div className="export-actions">
           <button className="export-btn export-btn--csv" onClick={onExportCSV} disabled={!shapes.length}>
             <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
