@@ -12,6 +12,9 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import { displayNumber, resolveRange } from '../services/towers.js'
+import { cumulativeM, spanAt } from '../services/geo.js'
+import { calcLength, formatLength } from '../services/kmlGenerator.js'
+import { esc, showTip, hideTip } from '../services/hoverTip.js'
 import DrawLayer from './DrawLayer.jsx'
 import CoordinateSearch from './CoordinateSearch.jsx'
 
@@ -40,6 +43,7 @@ function FitBounds({ towers, fitKey }) {
 const DOTS_BELOW = 400
 const OtherLine = memo(function OtherLine({ line, interactive, onActivate }) {
   const positions = useMemo(() => line.towers.map((t) => [t.lat, t.lon]), [line.towers])
+  const length = useMemo(() => calcLength(line.towers), [line.towers])
   const handlers = interactive ? { click: () => onActivate(line.key) } : {}
   return (
     <>
@@ -48,7 +52,7 @@ const OtherLine = memo(function OtherLine({ line, interactive, onActivate }) {
         pathOptions={{ color: line.color, weight: 4, opacity: 0.9, interactive }}
         eventHandlers={handlers}
       >
-        {interactive && <Tooltip sticky opacity={1}>{line.name} — click to open</Tooltip>}
+        {interactive && <Tooltip sticky opacity={1}>{line.name} · {formatLength(length)} — click to open</Tooltip>}
       </Polyline>
       {line.towers.length <= DOTS_BELOW && line.towers.map((t) => (
         <CircleMarker
@@ -285,6 +289,7 @@ export default function MapView({
   onShapePatch,
 }) {
   const positions = towers.map(t => [t.lat, t.lon])
+  const cum = useMemo(() => cumulativeM(towers.map(t => [t.lat, t.lon])), [towers])
   const lo = fromIdx !== null && toIdx !== null ? Math.min(fromIdx, toIdx) : null
   const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
   const rangePositions = lo !== null ? positions.slice(lo, hi + 1) : []
@@ -305,6 +310,22 @@ export default function MapView({
   const lineHandlers = addMode
     ? { click: (e) => { L.DomEvent.stop(e); onAddTower(e.latlng.lat, e.latlng.lng) } }
     : {}
+
+  // Hover the line: the span under the cursor between its two towers, how far
+  // along the line that is, and the whole length. Not while a draw tool is armed.
+  const spanTip = (e) => {
+    if (towers.length < 2) return
+    const s = spanAt(positions, cum, e.latlng.lat, e.latlng.lng)
+    const range = resolveRange(towers, fromIdx, toIdx)
+    const label = (i) => `T${esc(displayNumber(towers[i], i, range, startNumber))}`
+    showTip(e, `<div style="text-align:center;line-height:1.5">
+      <strong>${label(s.i)} → ${label(s.i + 1)}</strong><br/>
+      <span>This span: <b>${formatLength(s.spanM)}</b></span><br/>
+      <span>From ${label(0)}: <b>${formatLength(s.alongM)}</b></span><br/>
+      <span style="font-size:11px;color:#64748b">Total ${formatLength(s.totalM)}</span>
+    </div>`)
+  }
+  const hoverHandlers = drawMode ? {} : { mouseover: spanTip, mousemove: spanTip, mouseout: hideTip }
 
   function handleDrop(e) {
     e.preventDefault()
@@ -450,13 +471,13 @@ export default function MapView({
             <Polyline
               positions={positions}
               pathOptions={{ color: '#fb923c', weight: 10, opacity: 0.30, interactive: !drawMode }}
-              eventHandlers={lineHandlers}
+              eventHandlers={{ ...lineHandlers, ...hoverHandlers }}
             />
             {/* Full line — crisp bright orange on top */}
             <Polyline
               positions={positions}
               pathOptions={{ color: '#ea580c', weight: 3.5, opacity: 1, interactive: !drawMode }}
-              eventHandlers={lineHandlers}
+              eventHandlers={{ ...lineHandlers, ...hoverHandlers }}
             />
 
             {/* Selected range — bold blue with halo */}

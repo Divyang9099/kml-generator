@@ -1497,3 +1497,19 @@ svg { flex-shrink: 0; }
   padding: 10px 10px 12px;
   border-top: 1px solid var(--border);
 }
+
+/* ── Selected feature card (Draw) ─────────────────────── */
+.shape-card {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.shape-card-top { display: flex; align-items: center; gap: 8px; }
+.shape-card-name {
+  flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.shape-card-measure { font-size: 12px; color: var(--text-2, #475569); font-variant-numeric: tabular-nums; }
+.shape-card-note { font-size: 12px; color: var(--text-3); white-space: pre-wrap; }
+.shape-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.shape-card-del:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }

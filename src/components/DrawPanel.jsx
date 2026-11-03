@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { TYPE_LABEL, measurementOf, isComplete } from '../services/shapes.js'
 
 // "Select" is also the only mode a shape can be dragged, reshaped or have a
@@ -44,6 +44,17 @@ export default function DrawPanel({
   opening,
 }) {
   const fileRef = useRef(null)
+  const cardRef = useRef(null)
+  const rowRef = useRef(null)
+  const selected = shapes.find((s) => s.id === selectedId) || null
+
+  // A shape picked on the map should show up here: bring its card, and its row
+  // in the list below, into view.
+  useEffect(() => {
+    if (!selectedId) return
+    cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    rowRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [selectedId])
 
   function handleFile(e) {
     // Copied out before the reset, which empties the input's file list.
@@ -125,6 +136,24 @@ export default function DrawPanel({
         </div>
       </section>
 
+      {selected && (
+        <div className="shape-card" ref={cardRef}>
+          <div className="shape-card-top">
+            <span className="shape-swatch" style={{ background: selected.color }} />
+            <span className="shape-card-name">{selected.name?.trim() || TYPE_LABEL[selected.type]}</span>
+            <span className="shape-type">{TYPE_LABEL[selected.type]}</span>
+            <button className="alert-dismiss" title="Deselect" onClick={() => onSelect(null)}>✕</button>
+          </div>
+          <div className="shape-card-measure">{measurementOf(selected)}</div>
+          {selected.description?.trim() && <div className="shape-card-note">{selected.description}</div>}
+          <div className="shape-card-actions">
+            <button className="edit-toggle" onClick={() => onEditShape(selected.id)}>✎ Edit</button>
+            <button className="edit-toggle" onClick={() => onBufferShape(selected.id)}>⭘ Buffer</button>
+            <button className="edit-toggle shape-card-del" onClick={() => onDeleteShape(selected.id)}>✕ Delete</button>
+          </div>
+        </div>
+      )}
+
       <div className="tower-list">
         <div className="tower-list-header">
           <span className="tower-list-title">Features</span>
@@ -138,6 +167,7 @@ export default function DrawPanel({
             {shapes.map((shape) => (
               <div
                 key={shape.id}
+                ref={shape.id === selectedId ? rowRef : null}
                 className={`tower-item${shape.id === selectedId ? ' tower-item--range' : ''}`}
               >
                 <button className="tower-item-main" onClick={() => onSelect(shape.id)}>

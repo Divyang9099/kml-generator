@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Polyline,
   Polygon,
@@ -11,7 +11,9 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import { outlineOf, ringsOf, measurementOf, radiusBetween, MIN_VERTICES } from '../services/shapes.js'
-import { destination } from '../services/geo.js'
+import { destination, cumulativeM, spanAt } from '../services/geo.js'
+import { formatLength } from '../services/kmlGenerator.js'
+import { esc, showTip, hideTip } from '../services/hoverTip.js'
 
 const handleIcon = L.divIcon({ className: 'vertex-handle', iconSize: [12, 12], iconAnchor: [6, 6] })
 const midIcon = L.divIcon({ className: 'vertex-handle vertex-handle--mid', iconSize: [10, 10], iconAnchor: [5, 5] })
@@ -61,7 +63,33 @@ function DrawEvents({ tool, draft, onVertex, onFinish, onCursor }) {
   return null
 }
 
+// The path a hover measures along: a line as drawn, a polygon or rectangle
+// closed back on itself. A point or circle has no spans.
+function hoverPath(shape) {
+  if (shape.type === 'line') return shape.coords
+  if (shape.type === 'polygon' || shape.type === 'rectangle') {
+    const ring = outlineOf(shape)
+    return ring ? [...ring, ring[0]] : null
+  }
+  return null
+}
+
 function ShapeGeometry({ shape, selected, onSelect, interactive }) {
+  const path = useMemo(() => hoverPath(shape), [shape])
+  const cum = useMemo(() => (path ? cumulativeM(path) : null), [path])
+
+  // Distance under the cursor, rebuilt as it moves: this stretch, how far along
+  // from the start (lines only — a ring has no start), and the whole shape.
+  const tip = (e) => {
+    const s = spanAt(path, cum, e.latlng.lat, e.latlng.lng)
+    showTip(e, `<div style="text-align:center;line-height:1.5">
+      <strong>${esc(shape.name?.trim() || shape.type)}</strong><br/>
+      <span>This ${shape.type === 'line' ? 'segment' : 'edge'}: <b>${formatLength(s.spanM)}</b></span><br/>
+      ${shape.type === 'line' ? `<span>From start: <b>${formatLength(s.alongM)}</b></span><br/>` : ''}
+      <span style="font-size:11px;color:#64748b">${esc(measurementOf(shape))}</span>
+    </div>`)
+  }
+
   const options = {
     color: shape.color,
     weight: selected ? (shape.width ?? 3) + 2 : shape.width ?? 3,
@@ -70,8 +98,11 @@ function ShapeGeometry({ shape, selected, onSelect, interactive }) {
     fillOpacity: shape.opacity ?? 0.25,
     dashArray: selected ? '6 4' : undefined,
   }
-  const handlers = interactive ? { click: () => onSelect(shape.id) } : {}
-  const label = (
+  const handlers = interactive
+    ? { click: () => onSelect(shape.id), ...(path ? { mouseover: tip, mousemove: tip, mouseout: hideTip } : {}) }
+    : {}
+  // Shapes with spans get the moving tooltip above instead.
+  const label = path ? null : (
     <Tooltip direction="top" opacity={1}>
       <div style={{ textAlign: 'center' }}>
         <strong>{shape.name?.trim() || shape.type}</strong>

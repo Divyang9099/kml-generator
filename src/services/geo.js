@@ -60,3 +60,32 @@ export function destination(lat, lon, bearingDeg, distanceM) {
   )
   return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI) + 540) % 360 - 180]
 }
+
+// Running distance to each vertex of a path of [lat, lon] pairs: cum[i] is the
+// metres from the start to vertex i, so cum[n-1] is the whole length.
+export function cumulativeM(path) {
+  const cum = [0]
+  for (let i = 1; i < path.length; i++) {
+    cum.push(cum[i - 1] + haversineM(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]))
+  }
+  return cum
+}
+
+// Which span of the path a point is nearest to, and how far along the path it
+// sits. Degrees are flattened with longitude scaled by cos(lat), which over the
+// handful of metres between a cursor and the line it is on is exact enough.
+export function spanAt(path, cum, lat, lon) {
+  const k = Math.cos((lat * Math.PI) / 180)
+  let best = { d: Infinity, i: 0, t: 0 }
+  for (let i = 0; i < path.length - 1; i++) {
+    const ax = path[i][1] * k, ay = path[i][0]
+    const dx = path[i + 1][1] * k - ax
+    const dy = path[i + 1][0] - ay
+    const len = dx * dx + dy * dy
+    const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((lon * k - ax) * dx + (lat - ay) * dy) / len))
+    const d = (lon * k - (ax + t * dx)) ** 2 + (lat - (ay + t * dy)) ** 2
+    if (d < best.d) best = { d, i, t }
+  }
+  const spanM = cum[best.i + 1] - cum[best.i]
+  return { i: best.i, spanM, alongM: cum[best.i] + best.t * spanM, totalM: cum[cum.length - 1] }
+}
