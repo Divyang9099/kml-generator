@@ -7,6 +7,7 @@ import ImportButton from './components/ImportButton.jsx'
 import LineTree from './components/LineTree.jsx'
 import TowerEditModal from './components/TowerEditModal.jsx'
 import DrawPanel from './components/DrawPanel.jsx'
+import DrawToolbar from './components/DrawToolbar.jsx'
 import ShapeEditModal from './components/ShapeEditModal.jsx'
 import BufferModal from './components/BufferModal.jsx'
 import SaveAsModal from './components/SaveAsModal.jsx'
@@ -72,6 +73,7 @@ export default function App() {
   const [addMode, setAddMode]             = useState(false)
   const [editingUid, setEditingUid]       = useState(null)  // tower open in the edit dialog
   const [restoredNote, setRestoredNote]   = useState(() => !isEmptySession(restored))
+  const [fitNonce, setFitNonce]         = useState(0) // bumped to fly the map to what just loaded
   const [collapsed, setCollapsed]         = useState(() => new Set()) // folders shut by hand
   const [hidden, setHidden]               = useState(() => new Set()) // lines hidden from the map
 
@@ -217,7 +219,10 @@ export default function App() {
     try {
       const data = await fetchLineGeometry(result.type, result.id)
       if (!data.length) setError('No tower geometry found for this line.')
-      else reset({ lines: [{ ...line, towers: data }], activeId: line.key, shapes })
+      else {
+        reset({ lines: [{ ...line, towers: data }], activeId: line.key, shapes })
+        setFitNonce(n => n + 1)
+      }
     } catch (e) {
       setError('Failed to load towers: ' + e.message)
     } finally {
@@ -247,6 +252,7 @@ export default function App() {
       }))
       setCollapsed(c => new Set([...c].filter((k) => !keys.has(k))))
       setHidden(h => new Set([...h].filter((k) => !keys.has(k))))
+      setFitNonce(n => n + 1)
       if (notes.length) setNotice(notes.join(' '))
     } finally {
       setImporting(false)
@@ -487,6 +493,7 @@ export default function App() {
       setTool('select')
       setSelectedShapeId(null)
       setRestoredNote(false)
+      setFitNonce(n => n + 1)
       if (notes.length) setNotice(notes.join(' '))
     } finally {
       setOpening(false)
@@ -580,7 +587,6 @@ export default function App() {
       .map((l) => ({ key: l.key, name: l.tags?.name || `Line ${l.id}`, color: colorOf(lines, l.key), towers: l.towers })),
     [lines, activeId, hidden],
   )
-  const fitKey = useMemo(() => lines.map((l) => l.key).join('|'), [lines])
 
   const voltage  = selectedLine?.tags?.voltage
     ? `${Math.round(Number(selectedLine.tags.voltage) / 1000)} kV`
@@ -661,22 +667,11 @@ export default function App() {
           {mode === 'draw' ? (
             <DrawPanel
               shapes={shapes}
-              tool={tool}
-              draft={draft}
-              onTool={handleTool}
-              onFinish={finishDraft}
-              onCancel={cancelDraft}
               selectedId={selectedShapeId}
               onSelect={setSelectedShapeId}
               onEditShape={setEditingShapeId}
               onDeleteShape={handleDeleteShape}
               onBufferShape={setBufferingShapeId}
-              onOpenFiles={handleOpenShapeFiles}
-              onExport={handleExportShapes}
-          onExportCSV={handleExportShapesCSV}
-              onClear={handleClearShapes}
-              onPointsToLine={handlePointsToLine}
-              opening={opening}
             />
           ) : (
             <>
@@ -692,7 +687,6 @@ export default function App() {
                 <p className="search-hint">
                   Try a line name like <code>400 kV</code> or an ID like <code>relation:14543153</code>
                 </p>
-                <ImportButton onImport={handleImportFiles} importing={importing} />
               </section>
 
               {loading && (
@@ -812,12 +806,34 @@ export default function App() {
           selectionMode={selectionMode}
           onTowerClick={handleTowerClick}
           startNumber={startNumber}
-          fitKey={fitKey}
+          fitKey={fitNonce}
           editMode={editMode}
           addMode={addMode}
           onTowerMove={handleTowerMove}
           onAddTower={handleAddTower}
           onImportFiles={mode === 'draw' ? handleOpenShapeFiles : handleImportFiles}
+          overlay={mode === 'draw' ? (
+            <DrawToolbar
+              shapes={shapes}
+              tool={tool}
+              draft={draft}
+              onTool={handleTool}
+              onFinish={finishDraft}
+              onCancel={cancelDraft}
+              onOpenFiles={handleOpenShapeFiles}
+              onExport={handleExportShapes}
+              onExportCSV={handleExportShapesCSV}
+              onClear={handleClearShapes}
+              onPointsToLine={handlePointsToLine}
+              opening={opening}
+            />
+          ) : (
+            <div className="draw-toolbar">
+              <div className="draw-toolbar-row">
+                <ImportButton onImport={handleImportFiles} importing={importing} />
+              </div>
+            </div>
+          )}
           onEditTower={setEditingUid}
           drawMode={mode === 'draw'}
           shapes={shapes}

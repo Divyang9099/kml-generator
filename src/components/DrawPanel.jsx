@@ -1,49 +1,16 @@
 import { useEffect, useRef } from 'react'
-import { TYPE_LABEL, measurementOf, isComplete } from '../services/shapes.js'
+import { TYPE_LABEL, measurementOf } from '../services/shapes.js'
 
-// "Select" is also the only mode a shape can be dragged, reshaped or have a
-// vertex deleted in — every other tool is busy waiting for clicks that build
-// a new shape, so it locks the existing ones rather than let a stray click
-// select one by accident. Labelling it "Select / Edit" is what tells people
-// that, instead of leaving them hunting for a separate edit switch.
-const TOOLS = [
-  { id: 'select',    label: 'Select',    icon: '⬚', title: 'Select — also how you drag, reshape or delete a point on any shape' },
-  { id: 'point',     label: 'Point',     icon: '📍' },
-  { id: 'line',      label: 'Line',      icon: '╱' },
-  { id: 'polygon',   label: 'Polygon',   icon: '⬠' },
-  { id: 'rectangle', label: 'Rectangle', icon: '▭' },
-  { id: 'circle',    label: 'Circle',    icon: '◯' },
-]
-
-const HINTS = {
-  point:     'Click the map to drop a point.',
-  line:      'Click each turn. Right-click, double-click or Enter to finish.',
-  polygon:   'Click each corner. Right-click, double-click or Enter to close it.',
-  rectangle: 'Click one corner, then the opposite corner.',
-  circle:    'Click the centre, then click to set the radius.',
-  select:    'Click a shape to select it, then drag a handle dot to move that point, or double-click one to remove it.',
-}
-
+// The feature list. The drawing controls live in DrawToolbar, over the map, so
+// this gets the whole height of the sidebar.
 export default function DrawPanel({
   shapes,
-  tool,
-  draft,
-  onTool,
-  onFinish,
-  onCancel,
   selectedId,
   onSelect,
   onEditShape,
   onDeleteShape,
   onBufferShape,
-  onOpenFiles,
-  onExport,
-  onExportCSV,
-  onClear,
-  onPointsToLine,
-  opening,
 }) {
-  const fileRef = useRef(null)
   const cardRef = useRef(null)
   const rowRef = useRef(null)
   const selected = shapes.find((s) => s.id === selectedId) || null
@@ -56,86 +23,8 @@ export default function DrawPanel({
     rowRef.current?.scrollIntoView({ block: 'nearest' })
   }, [selectedId])
 
-  function handleFile(e) {
-    // Copied out before the reset, which empties the input's file list.
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
-    if (files.length) onOpenFiles(files)
-  }
-
-  const drawing = tool && tool !== 'select' && draft.length > 0
-  const canFinish = drawing && isComplete(tool, draft)
-  const pointCount = shapes.filter((s) => s.type === 'point').length
-
   return (
     <>
-      <section className="section">
-        <div className="section-label">Draw</div>
-        <div className="tool-grid">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              className={`tool-btn${tool === t.id ? ' tool-btn--on' : ''}`}
-              onClick={() => onTool(t.id)}
-              title={t.title}
-            >
-              <span className="tool-icon">{t.icon}</span>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <p className="search-hint">{HINTS[tool] || HINTS.select}</p>
-
-        <button
-          className="edit-toggle join-line-btn"
-          onClick={onPointsToLine}
-          disabled={pointCount < 2}
-          title={pointCount < 2 ? 'Needs at least 2 points on the canvas' : `Join all ${pointCount} points into one line`}
-        >
-          🔗 Points → Line{pointCount > 0 ? ` (${pointCount})` : ''}
-        </button>
-
-        {drawing && (
-          <div className="draft-bar">
-            <span className="draft-count">{draft.length} point{draft.length === 1 ? '' : 's'}</span>
-            <div className="draft-actions">
-              <button className="edit-toggle" onClick={onCancel}>Cancel</button>
-              <button className="edit-toggle edit-toggle--on" onClick={onFinish} disabled={!canFinish}>
-                Finish
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="section">
-        <div className="import-row">
-          <input ref={fileRef} type="file" accept=".kml,.kmz,.csv,.txt" multiple className="import-input" onChange={handleFile} />
-          <button className="import-btn" onClick={() => fileRef.current?.click()} disabled={opening}>
-            {opening ? <span className="spinner" /> : '📂'} {opening ? 'Opening…' : 'Open KML / CSV'}
-          </button>
-          <button className="import-btn btn-clear" onClick={onClear} disabled={!shapes.length}>🗑 Clear</button>
-        </div>
-        <p className="search-hint">or drop .kml / .kmz / .csv files on the map — pick several to open them together</p>
-        <div className="export-actions">
-          <button className="export-btn export-btn--csv" onClick={onExportCSV} disabled={!shapes.length}>
-            <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-              <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M3 8h14M8 8v9" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            Export CSV
-          </button>
-          <button className="export-btn" onClick={onExport} disabled={!shapes.length}>
-          <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-            <path d="M10 3v10M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M3 16h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          Export KML
-          {shapes.length > 0 && <span className="export-btn-count">{shapes.length}</span>}
-          </button>
-        </div>
-      </section>
-
       {selected && (
         <div className="shape-card" ref={cardRef}>
           <div className="shape-card-top">
@@ -154,14 +43,14 @@ export default function DrawPanel({
         </div>
       )}
 
-      <div className="tower-list">
+      <div className="tower-list tower-list--fill">
         <div className="tower-list-header">
           <span className="tower-list-title">Features</span>
           <span className="tower-list-count">{shapes.length} total</span>
         </div>
 
         {shapes.length === 0 ? (
-          <div className="shape-empty">Nothing drawn yet. Pick a tool above and click the map.</div>
+          <div className="shape-empty">Nothing drawn yet.</div>
         ) : (
           <div className="tower-list-scroll">
             {shapes.map((shape) => (

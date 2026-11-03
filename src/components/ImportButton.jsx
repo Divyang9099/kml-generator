@@ -36,9 +36,6 @@ export default function ImportButton({ onImport, importing }) {
         )}
         {importing ? 'Reading…' : 'Import KML / CSV'}
       </button>
-      <span className="import-hint">
-        or drop .kml / .kmz / .csv files on the map — pick several to join them into one line
-      </span>
     </div>
   )
 }

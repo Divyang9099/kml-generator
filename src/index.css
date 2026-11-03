@@ -1513,3 +1513,49 @@ svg { flex-shrink: 0; }
 .shape-card-note { font-size: 12px; color: var(--text-3); white-space: pre-wrap; }
 .shape-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .shape-card-del:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+
+/* ── Draw toolbar (floats over the map) ───────────────── */
+.draw-toolbar {
+  position: absolute;
+  top: 12px;
+  /* Starts where the coordinate search ends (it sits at left: 56px and is about
+     310px wide) and stops short of the layers button on the right. */
+  left: 380px;
+  right: 72px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none; /* the gaps stay clickable map */
+}
+.draw-toolbar > * { pointer-events: auto; }
+.draw-toolbar-row {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 5px 8px;
+}
+@media (max-width: 1150px) {
+  .draw-toolbar { top: 64px; left: 12px; }
+}
+.draw-toolbar-hint {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--text-2);
+  background: rgba(255, 255, 255, 0.92); border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: var(--shadow-md);
+}
+.draw-toolbar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.draw-toolbar .import-row { margin-top: 0; }
+.draw-toolbar-group { display: flex; align-items: center; gap: 4px; }
+.draw-toolbar-sep { width: 1px; align-self: stretch; background: var(--border); }
+.tool-btn--bar { flex-direction: row; gap: 5px; padding: 6px 10px; font-size: 12px; }
+.draw-toolbar-csv { color: var(--green); border-color: #86efac; background: var(--white); }
+.draw-toolbar .btn-clear { background: var(--red-l); color: var(--red); border-color: #fca5a5; }
+.draw-toolbar .btn-clear:disabled { opacity: .5; }
+
+/* The feature list takes whatever height the sidebar has left. */
+.tower-list--fill { flex: 1 1 0; min-height: 220px; }
+.tower-list--fill .tower-list-scroll { max-height: none; min-height: 0; }
+.sidebar-body:has(> .tower-list--fill) { overflow-y: hidden; }

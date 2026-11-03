@@ -12,6 +12,7 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import { displayNumber, resolveRange } from '../services/towers.js'
+import { outlineOf } from '../services/shapes.js'
 import { cumulativeM, spanAt } from '../services/geo.js'
 import { calcLength, formatLength } from '../services/kmlGenerator.js'
 import { esc, showTip, hideTip } from '../services/hoverTip.js'
@@ -20,18 +21,45 @@ import CoordinateSearch from './CoordinateSearch.jsx'
 
 const { BaseLayer } = LayersControl
 
-// Re-frame the map when a different line is loaded — but not on every edit, or
-// deleting a tower would yank the view away from what you were working on.
-function FitBounds({ towers, fitKey }) {
+// While a flight is under way Leaflet stretches the vector layers — shapes,
+// lines, circle markers — by the zoom ratio instead of redrawing them, and only
+// redraws at the end. Across a big zoom change a 6px dot becomes a screen-sized
+// blob that hides the whole map. So they are hidden for the flight and come
+// back, redrawn at the right size, when it lands. Tiles and pins fly fine.
+function flyWithoutVectors(map, fly) {
+  const pane = map.getPane('overlayPane')
+  pane.style.visibility = 'hidden'
+  const restore = () => {
+    clearTimeout(timer)
+    map.off('moveend', restore)
+    pane.style.visibility = ''
+  }
+  // A flight that goes nowhere may never report back; do not leave it hidden.
+  const timer = setTimeout(restore, 4000)
+  map.on('moveend', restore)
+  fly()
+}
+
+// Fly the map to whatever was just loaded. It runs when fitKey changes — one
+// bump per import, open or search, so loading the same file again still
+// re-centres — and not on every edit, or deleting a tower would yank the view
+// away from what you were working on. The first run, on page load, just
+// restores the view without the flight.
+function FitBounds({ getPoints, fitKey }) {
   const map = useMap()
-  const towersRef = useRef(towers)
-  towersRef.current = towers
+  const getRef = useRef(getPoints)
+  getRef.current = getPoints
+  const mounted = useRef(false)
 
   useEffect(() => {
-    const current = towersRef.current
-    if (current.length > 0) {
-      map.fitBounds(L.latLngBounds(current.map(t => [t.lat, t.lon])), { padding: [50, 50] })
-    }
+    const points = getRef.current()
+    const instant = !mounted.current
+    mounted.current = true
+    if (!points.length) return
+    const bounds = L.latLngBounds(points)
+    const options = { padding: [50, 50], maxZoom: 17 }
+    if (instant) map.fitBounds(bounds, options)
+    else flyWithoutVectors(map, () => map.flyToBounds(bounds, { ...options, duration: 1.4 }))
   }, [fitKey, map])
 
   return null
@@ -73,7 +101,7 @@ function FlyToPoint({ point }) {
   const map = useMap()
   useEffect(() => {
     if (!point) return
-    map.flyTo([point.lat, point.lon], Math.max(map.getZoom(), 16), { duration: 0.8 })
+    flyWithoutVectors(map, () => map.flyTo([point.lat, point.lon], Math.max(map.getZoom(), 16), { duration: 1.4 }))
   }, [point, map])
   return null
 }
@@ -275,6 +303,7 @@ export default function MapView({
   onTowerMove,
   onAddTower,
   onImportFiles,
+  overlay = null,
   otherLines = [],
   onActivateLine,
   onEditTower,
@@ -294,11 +323,14 @@ export default function MapView({
   const hi = fromIdx !== null && toIdx !== null ? Math.max(fromIdx, toIdx) : null
   const rangePositions = lo !== null ? positions.slice(lo, hi + 1) : []
 
-  // Every point on the map that a re-frame should take in.
-  const fitTowers = useMemo(
-    () => (otherLines.length ? [...towers, ...otherLines.flatMap((l) => l.towers)] : towers),
-    [towers, otherLines],
-  )
+  // Every point a re-frame should take in: the drawn features when there are
+  // any in Draw mode, otherwise every loaded line. Built only when asked.
+  const getFitPoints = () => {
+    if (drawMode && shapes.length) {
+      return shapes.flatMap((sh) => outlineOf(sh) ?? sh.coords)
+    }
+    return [...towers, ...otherLines.flatMap((l) => l.towers)].map((t) => [t.lat, t.lon])
+  }
   // Other lines only take clicks when nothing else is waiting for one.
   const linesClickable = !drawMode && !addMode && !selectionMode
 
@@ -367,11 +399,7 @@ export default function MapView({
         </div>
       )}
 
-      {drawMode && (tool === 'line' || tool === 'polygon') && draft.length > 0 && (
-        <div className="map-hint map-hint--add">
-          ✏️  {draft.length} point{draft.length === 1 ? '' : 's'} — right-click, double-click or Enter to finish · Ctrl+Z undoes the last point
-        </div>
-      )}
+      {overlay}
 
       <CoordinateSearch point={coordPoint} onGo={setCoordPoint} onClear={() => setCoordPoint(null)} />
 
@@ -453,7 +481,7 @@ export default function MapView({
 
         {/* The tower line stays visible in draw mode as a backdrop, but stops
             responding to clicks so it cannot steal them from the draw tools. */}
-        {fitTowers.length > 0 && <FitBounds towers={fitTowers} fitKey={fitKey} />}
+        <FitBounds getPoints={getFitPoints} fitKey={fitKey} />
 
         {otherLines.map((line) => (
           <OtherLine
